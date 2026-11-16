@@ -62,7 +62,7 @@ main{flex:1;display:flex;flex-direction:column;gap:14px;padding-block:16px 24px;
 .gxsheet-bg{position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:60}.gxsheet{position:fixed;left:0;right:0;bottom:0;z-index:61;background:var(--surface);border-radius:16px 16px 0 0;padding:14px 16px 20px;display:flex;flex-direction:column;gap:10px;max-height:80vh;overflow:auto;box-shadow:0 -6px 24px rgba(0,0,0,.18)}
 .swgrid{display:grid;grid-template-columns:repeat(6,1fr);gap:6px}.sw{display:flex;flex-direction:column;align-items:center;gap:2px;border:2px solid transparent;border-radius:10px;background:none;padding:4px 0;cursor:pointer}.sw small{font-size:10px;line-height:1.1;text-align:center;color:var(--muted)}.sw[aria-pressed="true"]{border-color:var(--navy);background:var(--accent-soft)}
 .gxlab{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-bottom:-4px}.rmchip[aria-pressed="true"]{background:var(--danger);border-color:var(--danger);color:#fff}
-.rcnt{font-weight:800;font-size:15px}.rcnt.pk{color:#D97706}.rcnt.dl{color:var(--fresh)}.rcnt.amt{color:var(--navy)}.rcnt.z{color:var(--muted);font-weight:600}
+.rcnt{font-weight:800;font-size:15px}.rcnt.pk{color:var(--danger)}.rcnt.dl{color:var(--fresh)}.rcnt.amt{color:var(--navy)}.rcnt.z{color:var(--muted);font-weight:600}
 .attmini{display:flex;flex-wrap:wrap;justify-content:flex-end;align-items:center;gap:8px;margin:2px 0 10px}.attmini .attbtn{width:auto;min-width:calc((100% - 20px)/3);justify-content:center}.attmini .attconf{flex-basis:100%;margin:0;background:var(--danger-soft);color:var(--danger)}
 .sec-title.fsec{margin:10px 0 0;padding-top:12px;border-top:1px solid var(--line)}.sec-title.fsec:first-child{border-top:0;padding-top:0;margin-top:0}
 label.f{display:flex;flex-direction:column;gap:6px;font-size:13px;font-weight:600;color:var(--muted)}
@@ -346,7 +346,7 @@ const I = {
 const ic = n => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + (I[n] || "") + '</svg>';
 
 /* ---------- state & data ---------- */
-const APP_VER = 83;
+const APP_VER = 84;
 const COLS = ["stores","employees","customers","services","groups","products","routes","pricelists","colors","vendors","orders","closings","workers","pieceRates","wpays","workTypes","pickups","complaints","trips","rcash","attendance","advances","webreq","expenses"];
 const S = { db: null, mode: "connecting", d: Object.fromEntries(COLS.map(c => [c, []])), biz: undefined, counters: {},
   stack: [], view: "home", params: {}, form: null, draft: null, storeId: lsGet("ll_store"), empId: lsGet("ll_emp") || null, isOwner: false, userReady: false, skipSetup: false, ui: {}, armed: null,
@@ -715,12 +715,25 @@ VIEWS.setup = () => {
   };
 };
 
+function myTodayStats(st){
+  const t = todayStr(), e = currentEmp() || {}, me = myWorker(), mine = nameKey((me || e).name || "");
+  const booked = S.d.orders.filter(o => o.storeId === st.id && o.date === t && nameKey(o.by) === mine);
+  const deliveries = [], payments = [];
+  S.d.orders.filter(o => o.storeId === st.id).forEach(o => { (o.deliveries || []).forEach(d => { if (d.date === t && nameKey(d.by) === mine) deliveries.push({o, d}); }); (o.payments || []).forEach(p => { if (p.date === t && nameKey(p.by) === mine && +p.amount > 0) payments.push(p); }); });
+  const work = me ? ironLedger(st, me.id).filter(x => x.date === t && !x.rider && x.q > 0) : [];
+  const trips = me ? S.d.trips.filter(x => x.storeId === st.id && x.rider === me.id) : []; const stops = [];
+  trips.forEach(x => (x.stops || []).forEach(s => { if (s.st === "Done" && String(s.at || "").slice(0, 10) === t) stops.push(s); }));
+  const pickupStops = stops.filter(s => s.k === "p"), deliveryStops = stops.filter(s => s.k === "o");
+  const pickupPieces = pickupStops.reduce((n, s) => { const p = find("pickups", s.id); return n + (+s.pcs || +(p || {}).riderPcs || 0); }, 0);
+  return {booked: booked.length, bookedPieces: booked.reduce((n, o) => n + (+o.pieces || 0), 0), deliveries: deliveries.length, deliveredPieces: deliveries.reduce((n, x) => n + Object.values(x.d.lines || {}).reduce((a, q) => a + (+q || 0), 0), 0), collected: r2(payments.reduce((n, p) => n + +p.amount, 0)), workOrders: new Set(work.map(x => x.o && x.o.id).filter(Boolean)).size, workPieces: work.reduce((n, x) => n + x.q, 0), pickups: pickupStops.length, pickupPieces, riderDeliveries: deliveryStops.length, stops: stops.length};
+}
 VIEWS.counterHome = () => { const st = store(), b = S.biz || {}, e = currentEmp() || {}, t = todayStr();
   const mine = S.d.orders.filter(o => o.storeId === st.id && o.status !== "Cancelled");
   const ready = mine.filter(o => ["Ready","Partly delivered"].includes(o.status)).length;
-  const due = mine.reduce((a,o) => a + Math.max(0, balOf(o)), 0);
+  const due = mine.reduce((a,o) => a + Math.max(0, balOf(o)), 0), P = myTodayStats(st);
   return {title:"Counter", back:false, storePick:true, nav:"home", body:
     brandHead(b, esc(e.name || "") + ' · ' + esc(st.name) + ' · ' + esc(fmtDate(t))) + myAttMini(st) +
+    '<div class="stats"><div class="stat"><b>' + P.booked + '</b><span>My orders · ' + P.bookedPieces + ' pcs</span></div><div class="stat"><b>' + P.deliveries + '</b><span>My deliveries · ' + P.deliveredPieces + ' pcs</span></div><div class="stat"><b>' + money(P.collected) + '</b><span>My collections</span></div></div>' +
     '<p class="sec-title">Today\'s work</p><div class="tiles">' +
     '<button class="tile" data-act="newOrder"><span class="ic">' + ic("plus") + '</span><b>New order</b><small>Walk-in or pickup</small></button>' +
     '<button class="tile" data-act="go" data-v="orders"><span class="ic">' + ic("search") + '</span><b>Find order</b><small>Name, mobile or bill no.</small></button>' +
@@ -746,11 +759,14 @@ VIEWS.home = () => {
   const readyN = open.filter(o => ["Ready", "Out for delivery", "Partly delivered"].includes(o.status)).length; const inProc = open.length - readyN;
   const dueToday = open.filter(o => o.deliveryDate <= t).length;
   const receivable = mine.filter(o => (o.deliveries || []).length).reduce((a, o) => a + Math.max(0, balOf(o)), 0);
+  const liveStaff = isAdmin() ? staffWorkRows(st, [t, t]).filter(r => r.activity > 0) : [];
+  const liveLine = r => { const role = r.w.role || "Store staff"; if (role === "Rider") return r.stops + " stops"; if (["Processing", "Iron man"].includes(role)) return r.procOrders + " orders · " + r.pieces + " pcs"; return r.booked + " orders · " + r.deliveries + " deliveries · " + money(r.collected) + " collected"; };
   const step = (n, act, extra, icon, label, sub, badge) => '<button class="wf" data-act="' + act + '"' + extra + '><span class="wf-n">' + n + '</span><span class="ic">' + ic(icon) + '</span><span class="grow"><b>' + label + '</b><small>' + sub + '</small></span>' + (badge || "") + '</button>';
   const tile = (act, extra, icon, label, dis) => dis ? "" : '<button class="tile" data-act="' + act + '"' + extra + '><span class="ic">' + ic(icon) + '</span><b>' + label + '</b></button>';
   return { title: "Transactions", back: false, storePick: true, nav: "home",
     body: brandHead(b, esc(st.name) + (st.code ? " · " + esc(st.code) : "") + ' · ' + esc(fmtDate(t))) + myAttMini(st) +
       '<div class="stats"><div class="stat"><b>' + todays.length + '</b><span>Orders today · ' + todays.reduce((a, o) => a + (+o.pieces || 0), 0) + ' pcs</span></div><div class="stat"><b>' + money(collected) + '</b><span>Collected today</span></div><div class="stat"' + (dueToday ? ' style="border-color:var(--warn)"' : "") + '><b>' + dueToday + '</b><span>Due / overdue</span></div></div>' +
+      (isAdmin() ? '<p class="sec-title">Staff work today – live · ' + liveStaff.length + '</p>' + (liveStaff.length ? '<div class="card list">' + liveStaff.map(r => '<button class="item" data-act="go" data-v="rptStaffWork"><span class="avatar">' + esc(String(r.w.name || "?").split(/\s+/).map(x => x[0]).join("").slice(0, 2).toUpperCase()) + '</span><div class="grow"><div class="t">' + esc(r.w.name || "Staff") + ' <span class="pill">' + esc(r.w.role || "Store staff") + '</span></div><div class="s">' + esc(liveLine(r)) + (r.last ? ' · last ' + esc(fmtTime(r.last)) : '') + '</div></div><span class="chev">›</span></button>').join("") + '</div>' : '<p class="hint">No staff activity recorded today yet.</p>') : '') +
       (canPayroll() && S.d.orders.some(o => o.cntOpen && (o.storeId === st.id || (o.fac && o.fac.fid === st.id))) ? '<button class="notice" style="background:var(--danger-soft);color:var(--danger);border:0;width:100%;text-align:left;cursor:pointer;margin-top:10px" data-act="go" data-v="process" data-stage="cnt">' + ic("warn") + '<div><b>' + S.d.orders.filter(o => o.cntOpen && (o.storeId === st.id || (o.fac && o.fac.fid === st.id))).length + ' bill(s) with piece count mismatch</b> – tap to check ›</div></button>' : "") +
       (canPayroll() && wrNew(st).length ? '<button class="notice" data-act="go" data-v="webreq" style="border:0;width:100%;text-align:left;cursor:pointer;margin-top:10px">' + ic("chat") + '<div><b>' + wrNew(st).length + ' new online pickup request(s).</b> Tap to call and confirm.</div></button>' : "") + (isAdmin() && S.d.orders.length > 4000 ? '<div class="notice">' + ic("warn") + '<div><b>' + S.d.orders.length + ' bills in the app.</b> It is time to set up month-end closing and archiving (Option B) to keep the app fast. Please plan this update.</div></div>' : "") +
       occasionsHtml(t) +
@@ -982,8 +998,8 @@ function stageItems(st){ /* every open item as on now: {kind:"o"|"p", x, stage, 
 const periodHead = () => { const pk = S.ui.period || "today"; const [from, to] = periodRange(pk); return '<div class="chips" role="group" aria-label="Period">' + PERIODS.map(([k, l]) => '<button class="chip" data-act="period" data-p="' + k + '" aria-pressed="' + (k === pk) + '">' + l + '</button>').join("") + '</div><p class="hint">' + (pk === "all" ? "All dates" : esc(fmtDate(from)) + (from !== to ? " to " + esc(fmtDate(to)) : "")) + '</p>'; };
 const SW_PERIODS = [["today","Today"],["yday","Yesterday"],["7d","Last 7 days"],["month","This month"],["custom","Choose dates"]];
 function staffWorkRange(){ const k = S.ui.swPeriod || "today"; if (k !== "custom") return periodRange(k); const t = todayStr(); let from = S.ui.swFrom || t, to = S.ui.swTo || t; if (from > to) [from, to] = [to, from]; return [from, to]; }
-function staffWorkRows(st){
-  const [from, to] = staffWorkRange(), inR = d => d && d >= from && d <= to, nk = nameKey;
+function staffWorkRows(st, range){
+  const [from, to] = range || staffWorkRange(), inR = d => d && d >= from && d <= to, nk = nameKey;
   const staffView = !S.isOwner && !["Admin","Store manager"].includes(roleOf());
   const emp = currentEmp(), own = myWorker() || (emp ? {...emp, id: emp.workerId || emp.id, stores: emp.stores || []} : null);
   const workers = staffView ? (own ? [own] : []) : S.d.workers.filter(w => !(w.stores || []).length || (w.stores || []).includes(st.id));
@@ -1256,6 +1272,14 @@ function routeStops(st){ /* stops not yet on a trip */
   S.d.orders.filter(o => o.storeId === st.id && (o.status === "Out for delivery" || (["Ready", "Partly delivered"].includes(o.status) && isHomeDel(o))) && atStore(o) && !facOpen(o) && !openTrip(o.trip) && pendPcs(o) > 0).forEach(o => out.push({k: "o", x: o, route: routeOfO(o), grp: o.deliveryDate <= t || o.status === "Out for delivery" ? "due" : "early", late: o.deliveryDate < t, slot: o.deliverySlot || "", amt: Math.max(0, balOf(o)), pcs: pendPcs(o)}));
   return out.sort((a, b) => aptOf(a.x).localeCompare(aptOf(b.x)) || String(a.slot).localeCompare(String(b.slot)));
 }
+function scheduledPickups(st){
+  const t = todayStr();
+  return S.d.pickups.filter(p => p.storeId === st.id && p.status === "Ordered" && !openTrip(p.trip) && p.pickupDate > t)
+    .sort((a, b) => String(a.pickupDate + (a.pickupSlot || "")).localeCompare(String(b.pickupDate + (b.pickupSlot || ""))));
+}
+function scheduledPickupRows(st){
+  return scheduledPickups(st).map(p => '<div class="item"><div class="grow"><div class="t"><span class="pill bad">Pickup</span> <span class="mono">' + esc(p.no) + '</span> · ' + esc(p.cust.name) + '</div><div class="s"><b>' + esc(fmtDate(p.pickupDate)) + '</b>' + (p.pickupSlot ? ' · ' + esc(slotLabel(p.pickupSlot)) : '') + ' · ' + esc(routeName(routeOfP(p))) + '<br>' + esc(p.address || addrOf(p, "p") || "No address") + (p.cust.mobile ? ' · ' + esc(p.cust.mobile) : '') + '</div></div></div>').join("");
+}
 function riderCash(st, wid){ let got = 0; S.d.orders.filter(o => o.storeId === st.id).forEach(o => (o.payments || []).forEach(p => { if (p.rider === wid && p.mode === "cash") got += +p.amount; }));
   const settled = S.d.rcash.filter(h => h.storeId === st.id && h.w === wid).reduce((a, h) => a + (+h.expected || 0), 0); return r2(got - settled); }
 const riderCashAll = st => r2([...new Set([...riders(st).map(w => w.id), ...S.d.trips.filter(t => t.storeId === st.id).map(t => t.rider)])].reduce((a, w) => a + riderCash(st, w), 0));
@@ -1294,12 +1318,12 @@ VIEWS.bkImport = () => {
 };
 VIEWS.ironHome = () => {
   const st = store(); const b = S.biz || {}; const me = myWorker(); const e = currentEmp() || {}; const t0 = todayStr();
-  const L = me ? ironLedger(st, me.id).filter(x => x.date === t0) : []; const pcs = L.reduce((a, x) => a + x.q, 0), earned = r2(L.reduce((a, x) => a + x.amt, 0)); const cash = me ? riderCash(st, me.id) : 0;
+  const L = me ? ironLedger(st, me.id).filter(x => x.date === t0 && !x.rider && x.q > 0) : []; const pcs = L.reduce((a, x) => a + x.q, 0), worked = new Set(L.map(x => x.o && x.o.id).filter(Boolean)).size, earned = r2(L.reduce((a, x) => a + x.amt, 0)); const cash = me ? riderCash(st, me.id) : 0;
   const tile = (act, extra, icon, label) => '<button class="tile" data-act="' + act + '"' + extra + '><span class="ic">' + ic(icon) + '</span><b>' + label + '</b></button>';
   return { title: "Transactions", back: false, storePick: true, nav: "home",
     body: brandHead(b, esc(e.name || "") + ' · ' + esc(st.name) + ' · ' + esc(fmtDate(t0))) + myAttMini(st) +
       (!me ? '<div class="notice">' + ic("warn") + '<div>Your login is not linked to a staff record. Ask the manager to switch on Uses the app in Masters → Staff.</div></div>' : "") +
-      '<div class="stats"><div class="stat"><b>' + pcs + '</b><span>My pieces today</span></div><div class="stat"><b>' + money(earned) + '</b><span>Earned today</span></div><div class="stat"><b style="color:var(--warn)">' + money(cash) + '</b><span>Cash in hand</span></div></div>' +
+      '<div class="stats"><div class="stat"><b>' + pcs + '</b><span>My pieces today</span></div><div class="stat"><b>' + worked + '</b><span>My orders worked</span></div><div class="stat"><b>' + money(earned) + '</b><span>Earned today</span></div></div>' +
       '<div class="tiles">' + tile("newOrder", "", "plus", "Create order") + tile("go", ' data-v="process"', "layers", "Finishing work") + tile("go", ' data-v="orders"', "search", "Track orders") + tile("go", ' data-v="rptStaffWork"', "cal", "My activity") + tile("go", ' data-v="mis"', "chart", "My work &amp; pay") + '</div>' +
       (cash > 0 ? '<p class="hint">Hand over the cash in hand to the admin. It is recorded against your name until then.</p>' : "") };
 };
@@ -1332,11 +1356,11 @@ VIEWS.riderMis = () => {
   const day = {}; stops.filter(x => x.d >= from && x.d <= to).forEach(x => { const r = day[x.d] ||= {pk: 0, pcs: 0, dl: 0}; if (x.k === "p") { r.pk++; r.pcs += pkOf(x); } else r.dl++; });
   S.d.orders.filter(o => o.storeId === st.id).forEach(o => (o.deliveries || []).forEach(dv => { if (dv.by === me.name && !o.trip && dv.date >= from && dv.date <= to) { const r = day[dv.date] ||= {pk: 0, pcs: 0, dl: 0}; r.dl++; } }));
   const tod = day[t0] || {pk: 0, pcs: 0, dl: 0}; const L = riderLedger(st, me.id); const earnT = r2(L.filter(x => x.date === t0).reduce((a, x) => a + x.amt, 0)); const cash = riderCash(st, me.id);
-  const rs = routeStops(st); const pend = {}; rs.forEach(x => { const d = x.k === "p" ? x.x.pickupDate : (x.x.deliveryDate || t0); const k = d < t0 ? "Late" : d; const r = pend[k] ||= {pk: 0, dl: 0}; x.k === "p" ? r.pk++ : r.dl++; });
+  const rs = [...routeStops(st), ...scheduledPickups(st).map(p => ({k: "p", x: p}))]; const pend = {}; rs.forEach(x => { const d = x.k === "p" ? x.x.pickupDate : (x.x.deliveryDate || t0); const k = d < t0 ? "Late" : d; const r = pend[k] ||= {pk: 0, dl: 0}; x.k === "p" ? r.pk++ : r.dl++; });
   return { title: "My work", back: false, storePick: true, nav: "mis",
     body: '<p class="sec-title">Today</p><div class="stats"><div class="stat"><b>' + tod.pk + '</b><span>Pickups · ' + tod.pcs + ' pcs</span></div><div class="stat"><b>' + tod.dl + '</b><span>Bills delivered</span></div><div class="stat"><b style="color:var(--warn)">' + money(cash) + '</b><span>Cash in hand</span></div></div>' +
       '<p class="hint">Earned today ' + money(earnT) + (piecePaid(me) ? ' · rate ' + money(rateFor(me, RIDE, t0)) + rateUnit(me, RIDE) : ' · ' + esc(payType(me))) + '</p>' +
-      '<p class="sec-title">Pending pickups &amp; deliveries</p><div class="card pad">' + (Object.keys(pend).length ? '<table class="t mis"><thead><tr><th>Day</th><th class="r">Pickups</th><th class="r">Deliveries</th></tr></thead>' + Object.keys(pend).sort((a, b) => (a === "Late" ? "0" : a).localeCompare(b === "Late" ? "0" : b)).map(k => '<tr><td' + (k === "Late" ? ' style="color:var(--danger);font-weight:700"' : "") + '>' + (k === "Late" ? "Late" : esc(fmtDate(k))) + '</td><td class="r">' + pend[k].pk + '</td><td class="r">' + pend[k].dl + '</td></tr>').join("") + '</table>' : '<p class="hint">Nothing pending.</p>') + '</div>' +
+      '<p class="sec-title">Pending pickups &amp; deliveries</p><div class="card pad">' + (Object.keys(pend).length ? '<table class="t mis"><thead><tr><th>Day</th><th class="r">Pickups</th><th class="r">Deliveries</th></tr></thead>' + Object.keys(pend).sort((a, b) => (a === "Late" ? "0" : a).localeCompare(b === "Late" ? "0" : b)).map(k => '<tr><td' + (k === "Late" ? ' style="color:var(--danger);font-weight:700"' : "") + '>' + (k === "Late" ? "Late" : esc(fmtDate(k))) + '</td><td class="r"><b class="rcnt pk' + (pend[k].pk ? '' : ' z') + '">' + pend[k].pk + '</b></td><td class="r"><b class="rcnt dl' + (pend[k].dl ? '' : ' z') + '">' + pend[k].dl + '</b></td></tr>').join("") + '</table>' : '<p class="hint">Nothing pending.</p>') + '</div>' +
       '<div class="chips" role="group" aria-label="Period" style="margin-top:12px">' + PERIODS.map(([k, l]) => '<button class="chip" data-act="period" data-p="' + k + '" aria-pressed="' + (k === pk) + '">' + l + '</button>').join("") + '</div>' +
       '<p class="sec-title">Day-wise work</p><div class="card pad">' + (Object.keys(day).length ? '<table class="t mis"><thead><tr><th>Date</th><th class="r">Pickups</th><th class="r">Pcs collected</th><th class="r">Delivered</th></tr></thead>' + Object.keys(day).sort().reverse().map(d => '<tr><td>' + esc(fmtDate(d)) + '</td><td class="r">' + day[d].pk + '</td><td class="r">' + day[d].pcs + '</td><td class="r">' + day[d].dl + '</td></tr>').join("") + '</table>' : '<p class="hint">No work in this period.</p>') + '</div>' +
       myPayHtml(st, me) };
@@ -1354,16 +1378,18 @@ VIEWS.myTrips = () => {
 VIEWS.riderHome = () => {
   if (store() && !(S.ui.tidied || {})[store().id]) { (S.ui.tidied ||= {})[store().id] = 1; setTimeout(() => tidyTrips(store()).then(() => refresh()).catch(() => {}), 300); }
   const st = store(); const b = S.biz || {}; const me = myWorker(); const e = currentEmp() || {};
-  const stops = routeStops(st); const rids = [...new Set(stops.map(x => x.route))].sort((a, c) => (a ? 0 : 1) - (c ? 0 : 1) || routeName(a).localeCompare(routeName(c)));
+  const stops = routeStops(st); const future = scheduledPickups(st); const rids = [...new Set(stops.map(x => x.route))].sort((a, c) => (a ? 0 : 1) - (c ? 0 : 1) || routeName(a).localeCompare(routeName(c)));
   const mine = me ? S.d.trips.filter(t => t.storeId === st.id && t.rider === me.id) : []; const open = mine.filter(t => t.status === "Open");
-  const t0 = todayStr(); const doneToday = mine.flatMap(t => t.stops).filter(x => x.st === "Done" && String(x.at || "").slice(0, 10) === t0).length;
+  const t0 = todayStr(); const perf = myTodayStats(st); const doneToday = perf.stops;
   const cash = me ? riderCash(st, me.id) : 0; const earned = me ? r2(riderLedger(st, me.id).filter(x => x.date === t0).reduce((a, x) => a + x.amt, 0)) : 0;
   return { title: "Rider", back: false, storePick: true, nav: "home",
     body: brandHead(b, esc(e.name || "") + ' · ' + esc(st.name) + ' · ' + esc(fmtDate(t0))) + myAttMini(st) +
       (!me ? '<div class="notice">' + ic("warn") + '<div>Your login is not linked to a rider in Workers. Ask the manager to enter the same mobile number in Masters → Workers (work type ' + RIDE + ').</div></div>' : "") +
-      '<div class="stats"><div class="stat"><b>' + doneToday + '</b><span>Stops done today</span></div><div class="stat"><b style="color:var(--warn)">' + money(cash) + '</b><span>Cash in hand</span></div><div class="stat"><b>' + money(earned) + '</b><span>Earned today</span></div></div>' +
+      '<div class="stats" style="grid-template-columns:repeat(2,1fr)"><div class="stat"><b style="color:var(--danger)">' + perf.pickups + '</b><span>My pickups today</span></div><div class="stat"><b style="color:var(--danger)">' + perf.pickupPieces + '</b><span>Pieces picked up</span></div><div class="stat"><b style="color:var(--fresh)">' + perf.riderDeliveries + '</b><span>My deliveries today</span></div><div class="stat"><b>' + doneToday + '</b><span>Total stops done</span></div></div>' +
+      '<p class="hint">My earned today ' + money(earned) + ' · cash in hand ' + money(cash) + '</p>' +
       '<p class="sec-title">Routes – pickups &amp; deliveries waiting</p>' + (rids.length ? '<div class="card list">' + rids.map(r => { const l = stops.filter(x => x.route === r); const pk = l.filter(x => x.grp === "pickup").length, dl = l.filter(x => x.grp !== "pickup").length;
         return '<button class="item" data-act="go" data-v="routePlan:' + esc(r || "none") + '"><div class="grow"><div class="t"' + (r ? "" : ' style="color:var(--danger)"') + '>' + esc(routeName(r)) + '</div><div class="s"><b class="rcnt pk' + (pk ? "" : " z") + '">' + pk + '</b> pickup' + (pk === 1 ? "" : "s") + ' · <b class="rcnt dl' + (dl ? "" : " z") + '">' + dl + '</b> deliver' + (dl === 1 ? "y" : "ies") + ' · collect <b class="rcnt amt">' + money(l.reduce((a, x) => a + x.amt, 0)) + '</b></div></div><span class="chev">›</span></button>'; }).join("") + '</div>' : '<p class="hint">Nothing waiting on any route.</p>') +
+      (future.length ? '<p class="sec-title">Scheduled pickups – later · ' + future.length + '</p><p class="hint">Visible now for planning. These become selectable for a trip on the pickup date.</p><div class="card list">' + scheduledPickupRows(st) + '</div>' : '') +
       '<div class="tiles"><button class="tile" data-act="newOrder"><span class="ic">' + ic("plus") + '</span><b>Walk-in order at store</b></button><button class="tile" data-act="doorOrder"><span class="ic">' + ic("truck") + '</span><b>Order at customer\'s door</b></button><button class="tile" data-act="go" data-v="dispatch"><span class="ic">' + ic("check") + '</span><b>Deliver orders</b></button><button class="tile" data-act="go" data-v="orders"><span class="ic">' + ic("search") + '</span><b>Track orders</b></button><button class="tile" data-act="go" data-v="rptStaffWork"><span class="ic">' + ic("cal") + '</span><b>My activity</b><small>Today or chosen dates</small></button><button class="tile" data-act="go" data-v="myTrips"><span class="ic">' + ic("bike") + '</span><b>My trips</b><small' + (open.length ? ' style="color:var(--danger);font-weight:700">' + open.length + ' open' : '>No open trip') + '</small></button><button class="tile" data-act="go" data-v="complaints"><span class="ic">' + ic("chat") + '</span><b>Complaints</b></button></div>' };
 };
 VIEWS.sendRider = () => {
@@ -1376,7 +1402,7 @@ VIEWS.sendRider = () => {
 };
 VIEWS.trips = () => {
   if (store() && !(S.ui.tidied || {})[store().id]) { (S.ui.tidied ||= {})[store().id] = 1; setTimeout(() => tidyTrips(store()).then(() => refresh()).catch(() => {}), 300); }
-  const st = store(); const stops = routeStops(st); const rids = [...new Set(stops.map(x => x.route))].sort((a, b) => (a ? 0 : 1) - (b ? 0 : 1) || routeName(a).localeCompare(routeName(b)));
+  const st = store(); const stops = routeStops(st); const future = scheduledPickups(st); const rids = [...new Set(stops.map(x => x.route))].sort((a, b) => (a ? 0 : 1) - (b ? 0 : 1) || routeName(a).localeCompare(routeName(b)));
   const ots = openTrips(st); const rs = [...new Set([...riders(st).map(w => w.id), ...S.d.trips.filter(t => t.storeId === st.id).map(t => t.rider), ...S.d.workers.map(w => w.id)])].map(w => [w, riderCash(st, w)]).filter(x => x[1] > 0.009);
   return { title: "Rider trips", homeBtn: true, storePick: true,
     body: '<p class="hint">Pickups (today and late) and ready home-delivery bills, grouped by route. Plan one trip per route to cover both.</p>' +
@@ -1384,12 +1410,13 @@ VIEWS.trips = () => {
         rids.map(r => { const l = stops.filter(x => x.route === r); return '<tr class="clk" data-act="go" data-v="routePlan:' + esc(r || "none") + '"><td><b' + (r ? "" : ' style="color:var(--danger)"') + '>' + esc(routeName(r)) + '</b></td><td class="r">' + ((n0 => '<b class="rcnt pk' + (n0 ? "" : " z") + '">' + n0 + '</b>')(l.filter(x => x.grp === "pickup").length)) + '</td><td class="r">' + ((n0 => '<b class="rcnt dl' + (n0 ? "" : " z") + '">' + n0 + '</b>')(l.filter(x => x.grp === "due").length)) + '</td><td class="r">' + ((n0 => '<b class="rcnt dl' + (n0 ? "" : " z") + '">' + n0 + '</b>')(l.filter(x => x.grp === "early").length)) + '</td><td class="r"><b class="rcnt amt">' + money(l.reduce((a, x) => a + x.amt, 0)) + '</b></td><td class="chev">›</td></tr>'; }).join("") + '</table></div>'
         : '<p class="hint">No pickups or home deliveries waiting.</p>') + '</div>' +
       (riders(st).length ? "" : '<div class="notice">' + ic("warn") + '<div>No riders set up. In Masters → Workers, add a worker with work type <b>' + RIDE + '</b>.</div></div>') +
+      (future.length ? '<p class="sec-title">Scheduled pickups – later · ' + future.length + '</p><p class="hint">Shown for planning; they enter the Route board on the pickup date.</p><div class="card list">' + scheduledPickupRows(st) + '</div>' : '') +
       '<p class="sec-title">Trips on the road · ' + ots.length + '</p>' + (ots.length ? '<div class="card list">' + ots.map(t => { const d = t.stops.filter(x => x.st !== "Pending").length; return '<button class="item" data-act="go" data-v="trip:' + esc(t.id) + '"><div class="grow"><div class="t">' + esc(t.no) + ' · ' + esc(routeName(t.route)) + '</div><div class="s">' + esc(workerName(t.rider)) + ' · started ' + esc(fmtTime(t.startAt)) + ' · ' + d + ' of ' + t.stops.length + ' stops done</div></div><span class="chev">›</span></button>'; }).join("") + '</div>' : '<p class="hint">No open trips.</p>') +
       '<p class="sec-title">Cash with riders / iron men</p>' + (rs.length ? '<div class="card list">' + rs.map(([w, v]) => '<button class="item" data-act="go" data-v="rcash:' + esc(w) + '"><div class="grow"><div class="t">' + esc(workerName(w)) + '</div><div class="s">Tap to take handover</div></div><b class="num" style="color:var(--warn)">' + money(v) + '</b></button>').join("") + '</div>' : '<p class="hint">No cash pending with riders.</p>') +
       '<button class="link" data-act="go" data-v="tripHist">Past trips ›</button>' };
 };
 function stopRow(x, sel){ const c = custOf(x.x); const key = x.k + "|" + x.x.id;
-  return '<label class="radio-card" style="align-items:flex-start"><input type="checkbox" data-act="rpSel" data-k="' + esc(key) + '"' + (sel.has(key) ? " checked" : "") + '><div style="flex:1;min-width:0"><div><span class="pill ' + (x.k === "p" ? "warn" : "ok") + '">' + (x.k === "p" ? "Pickup" : "Delivery") + '</span> <b class="mono">' + esc(x.x.no) + '</b>' + (x.late ? ' <span class="pill bad">Late</span>' : "") + careFlag(x.k === "o" ? x.x : {}) + '</div>' +
+  return '<label class="radio-card" style="align-items:flex-start"><input type="checkbox" data-act="rpSel" data-k="' + esc(key) + '"' + (sel.has(key) ? " checked" : "") + '><div style="flex:1;min-width:0"><div><span class="pill ' + (x.k === "p" ? "bad" : "ok") + '">' + (x.k === "p" ? "Pickup" : "Delivery") + '</span> <b class="mono">' + esc(x.x.no) + '</b>' + (x.late ? ' <span class="pill bad">Late</span>' : "") + careFlag(x.k === "o" ? x.x : {}) + '</div>' +
     '<div style="font-weight:600">' + esc(x.x.cust.name) + ' <span class="hint">' + esc(x.x.cust.mobile || "") + '</span></div><div class="hint">' + esc(addrOf(x.x, x.k) || "No address") + (x.slot ? ' · ' + esc(slotLabel(x.slot)) : "") + '</div>' +
     (x.k === "o" ? '<div class="hint">' + x.pcs + ' pcs · collect <b>' + money(x.amt) + '</b> · due ' + esc(fmtDate(x.x.deliveryDate)) + '</div>' : (x.x.instructions ? careBand(null, x.x.instructions) : "") + '<button type="button" class="btn small" style="margin-top:8px" data-act="pkPicked" data-id="' + esc(x.x.id) + '">' + ic("check") + 'Picked up – enter items</button>') + (!c.route && !x.route && !isRider() ? '<button class="link" data-act="edit" data-ent="customers" data-id="' + esc(c.id || "") + '">Set route for this customer ›</button>' : "") + '</div></label>'; }
 VIEWS.routePlan = (rid) => {
@@ -1425,7 +1452,7 @@ VIEWS.trip = (id) => {
       if (F === key) acts = '<div class="chips" style="margin-top:6px">' + FAIL_REASONS.map(r => '<button class="chip" data-act="tFailR" data-k="' + esc(key) + '" data-v="' + esc(r) + '">' + esc(r) + '</button>').join("") + '<button class="chip" data-act="tFail" data-k="">Cancel</button></div>';
       else acts = (x.k === "p" ? '<button class="btn bigact" data-act="pkPicked" data-id="' + esc(x.id) + '" data-trip="' + esc(t.id) + '">' + ic("check") + 'Picked up – enter items</button>'
         : '<button class="btn bigact" data-act="tDeliver" data-id="' + esc(x.id) + '">' + ic("check") + 'Delivered</button>') + '<div class="row" style="margin-top:6px;flex-wrap:wrap"><button class="btn small danger" data-act="tFail" data-k="' + esc(key) + '">Not done</button>' + (onWay ? '<a class="btn small ghost" target="_blank" rel="noopener" href="' + onWay + '">' + ic("chat") + 'On the way</a>' : "") + (x.map ? '<a class="btn small ghost" target="_blank" rel="noopener" href="' + esc(x.map) + '">Map</a>' : "") + (x.mobile ? '<a class="btn small ghost" href="tel:' + esc(x.mobile) + '">Call</a>' : "") + '</div>'; }
-    return '<div class="ordercard"><div class="top" style="cursor:default"><div style="min-width:0;flex:1"><div>' + pill.replace('<span class="pill', '<span style="float:right" class="pill') + '<span class="pill ' + (x.k === "p" ? "warn" : "ok") + '">' + (x.k === "p" ? "Pickup" : "Delivery") + '</span> <b class="mono">' + esc(x.no) + '</b>' + (x.care ? ' <span class="flagpill">⚑ CARE</span>' : "") + '</div><div style="font-weight:600">' + esc(x.name) + ' <span class="hint">' + esc(x.mobile || "") + '</span></div><div class="hint">' + esc(x.addr || "") + '</div>' +
+    return '<div class="ordercard"><div class="top" style="cursor:default"><div style="min-width:0;flex:1"><div>' + pill.replace('<span class="pill', '<span style="float:right" class="pill') + '<span class="pill ' + (x.k === "p" ? "bad" : "ok") + '">' + (x.k === "p" ? "Pickup" : "Delivery") + '</span> <b class="mono">' + esc(x.no) + '</b>' + (x.care ? ' <span class="flagpill">⚑ CARE</span>' : "") + '</div><div style="font-weight:600">' + esc(x.name) + ' <span class="hint">' + esc(x.mobile || "") + '</span></div><div class="hint">' + esc(x.addr || "") + '</div>' +
       (x.k === "o" ? '<div class="hint">' + x.pcs + ' pcs · collect ' + money(x.amt) + (x.st === "Done" ? ' · got <b>' + money(x.paid || 0) + '</b> ' + esc(x.mode === "later" ? "pay later" : (MODE_NAMES[x.mode] || "")) : "") + '</div>' : (x.bags || x.pcs ? '<div class="hint">' + (x.pcs ? x.pcs + ' pcs · ' : "") + (x.bags || 0) + ' bag(s)</div>' : "")) + (x.reason ? '<div class="hint" style="color:var(--danger)">' + esc(x.reason) + '</div>' : "") + (x.at && x.st !== "Pending" ? '<div class="hint">' + esc(fmtTime(x.at)) + '</div>' : "") + acts + '</div></div></div>'; };
   const C = S.ui.tclose === id;
   return { title: t.no, homeBtn: true,
@@ -1503,7 +1530,7 @@ function pkCard(p){
   const c = find("customers", p.cust.id) || {}; const t = todayStr(); const late = p.status === "Ordered" && (p.pickupDate < t || (p.pickupDate === t && +String(p.pickupSlot || "24").slice(6, 8) <= new Date().getHours()));
   const msg = "Dear " + p.cust.name + ", your pickup is booked. Order ID: " + p.no + ". Our rider will come on " + fmtDate(p.pickupDate) + ", " + slotLabel(p.pickupSlot || "") + ". – " + ((S.biz || {}).name || "");
   const wl = /^\d{10}$/.test(p.cust.mobile || "") ? "https://wa.me/91" + p.cust.mobile + "?text=" + encodeURIComponent(msg) : "";
-  return '<div class="pcard" style="--sc:#D97706" data-s="' + esc([p.no, p.cust.name, p.cust.mobile].join(" ").toLowerCase()) + '"><div class="pc-top"><div class="pc-main"><div class="pc-no">' + billNoHtml(p.no) + '</div><div class="pc-row"><span class="svcbadge" style="background:#D97706">Pickup order</span>' + (late ? '<span class="pill bad">Late</span>' : "") + '</div>' +
+  return '<div class="pcard" style="--sc:var(--danger)" data-s="' + esc([p.no, p.cust.name, p.cust.mobile].join(" ").toLowerCase()) + '"><div class="pc-top"><div class="pc-main"><div class="pc-no">' + billNoHtml(p.no) + '</div><div class="pc-row"><span class="svcbadge" style="background:var(--danger)">Pickup order</span>' + (late ? '<span class="pill bad">Late</span>' : "") + '</div>' +
     '<div class="hint">' + esc(p.cust.name) + ' · ' + esc(p.cust.mobile || "") + (p.address ? ' · ' + esc(p.address) : "") + '</div><div class="hint">Pickup ' + esc(fmtDate(p.pickupDate)) + ', ' + esc(slotLabel(p.pickupSlot || "")) + ' · booked ' + esc(fmtTime(p.createdAt)) + (p.by ? ' by ' + esc(p.by) : "") + '</div>' +
     careBand(null, p.instructions) + '<div class="pc-now">Now: <b>' + (p.status === "Ordered" ? "Waiting for rider" : p.status === "Picked up" ? "Picked up " + esc(fmtTime(p.pickedAt)) + (p.pickedBy ? " by " + esc(p.pickedBy) : "") + (p.riderPcs ? " · " + p.riderPcs + " pcs" : "") + (p.bags ? " · " + p.bags + " bag(s)" : "") + " – receive &amp; count at shop" : "Received at shop: " + p.recvPcs + " pcs" + (p.riderPcs && +p.riderPcs !== +p.recvPcs ? ' <span class="pill bad">rider said ' + p.riderPcs + '</span>' : "") + " – make the bill") + '</b></div></div></div>' +
     '<div class="pc-act">' + (p.status === "Ordered" ? '<button class="btn pc-btn" data-act="pkPicked" data-id="' + esc(p.id) + '">' + ic("truck") + 'Rider picked up</button>' + (wl ? '<a class="btn ghost small" target="_blank" rel="noopener" href="' + wl + '">' + ic("chat") + 'Remind</a>' : "") + '<button class="btn danger small" data-act="pkCancel" data-id="' + esc(p.id) + '">' + (S.armed === "pk" + p.id ? "Tap again" : "Cancel") + '</button>'
@@ -1937,6 +1964,29 @@ function applyMove(rec, svcId, to, now){
 }
 async function moveSvc(o, svcId, to){
   const rec = applyMove(clone(o), svcId, to, new Date().toISOString()); await save("orders", rec); putOrder(rec);
+}
+function undoSvcInfo(o, svcId){
+  if (!o || !svcId || !atStore(o) || facOpen(o) || ["Out for delivery", "Delivered", "Partly delivered", "Cancelled"].includes(o.status)) return null;
+  const f = (o.flow || {})[svcId]; const hist = f && Array.isArray(f.hist) ? f.hist : [];
+  if (hist.length < 2) return null;
+  const last = hist[hist.length - 1]; if (!last || !last.at) return null;
+  let cut = hist.length - 1; while (cut > 0 && hist[cut - 1].at === last.at) cut--;
+  const keep = hist.slice(0, cut), removed = hist.slice(cut); const prev = keep[keep.length - 1];
+  if (!prev || !prev.s || prev.s === f.stage) return null;
+  const gids = new Set(garmentsOf(o).filter(g => g.svc === svcId).map(g => g.gid)); let credits = 0;
+  removed.forEach(h => { const x = stepOf(o, svcId, h.s); const stage = x && x.track ? x.name : null; if (!stage) return; Object.entries(((o.jobs || {})[stage]) || {}).forEach(([gid, r]) => { if (gids.has(gid) && r && r.at === last.at) credits++; }); });
+  return {at: last.at, keep, removed, prev: prev.s, credits};
+}
+async function undoSvc(o, svcId){
+  const U = undoSvcInfo(o, svcId); if (!U) throw new Error("This process step can no longer be undone.");
+  const rec = clone(o); const f = rec.flow[svcId]; f.hist = U.keep; f.stage = U.prev;
+  const gids = new Set(garmentsOf(rec).filter(g => g.svc === svcId).map(g => g.gid));
+  U.removed.forEach(h => { const x = stepOf(rec, svcId, h.s); const stage = x && x.track ? x.name : null; if (!stage || !rec.jobs || !rec.jobs[stage]) return; Object.keys(rec.jobs[stage]).forEach(gid => { const r = rec.jobs[stage][gid]; if (gids.has(gid) && r && r.at === U.at) delete rec.jobs[stage][gid]; }); if (!Object.keys(rec.jobs[stage]).length) delete rec.jobs[stage]; });
+  const prevStatus = rec.status; rec.status = computeStatus(rec); const now = new Date().toISOString(); const sv = (find("services", svcId) || {}).name || "Service";
+  rec.history = [...(rec.history || []), {s: "Process corrected: " + sv + " back to " + stepName(rec, svcId, U.prev), at: now, by: empName()}];
+  rec.corrections = [...(rec.corrections || []), {kind: "undo process", svc: svcId, from: U.removed.map(h => h.s), to: U.prev, actionAt: U.at, at: now, by: empName(), creditsReversed: U.credits}];
+  if (prevStatus !== rec.status) rec.history.push({s: rec.status, at: now, by: empName()});
+  await save("orders", rec); putOrder(rec); return U;
 }
 async function setOrderStatus(o, to){
   const rec = clone(o); rec.status = to; rec.history = [...(o.history || [{s: "Received", at: o.createdAt}]), {s: to, at: new Date().toISOString(), by: empName()}];
@@ -2649,12 +2699,13 @@ function progressHtmlBase(o){
   if (o.status === "Cancelled") return "";
   const done = o.status === "Delivered";
   const blocks = orderSvcs(o).map(sid => {
-    const sv = find("services", sid) || {}; const flow = svcFlowOf(o, sid); const cur = svcStageOf(o, sid); const ci = flow.indexOf(cur); const f = (o.flow || {})[sid] || {};
+    const sv = find("services", sid) || {}; const flow = svcFlowOf(o, sid); const cur = svcStageOf(o, sid); const ci = flow.indexOf(cur); const f = (o.flow || {})[sid] || {}; const undo = !done ? undoSvcInfo(o, sid) : null; const undoKey = "undo|" + o.id + "|" + sid;
     const when = sg => { const h = (f.hist || []).filter(x => x.s === sg).pop(); return h ? fmtTime(h.at) + (h.by ? " · " + h.by : "") : (sg === "Received" ? fmtTime(o.createdAt) + (o.by ? " · " + o.by : "") : ""); };
     const nx = !done && !["Out for delivery"].includes(o.status) ? svcNext(o, sid) : null;
     return '<div class="svc-block"><div class="svc-head"><b>' + esc(sv.name || "Service") + ((f.opts || []).length ? ' <span class="pill warn">+ ' + esc(f.opts.join(", ")) + '</span>' : "") + '</b><span class="pill ' + (cur === "Ready" ? "ok" : "blue") + '">' + esc(cur === "Received" || cur === "Ready" ? cur : stepName(o, sid, cur) + " done") + '</span></div><ol class="steps">' +
       flow.map((sg, i) => '<li class="' + (i < ci ? "done" : i === ci ? "cur" : "") + '"><button data-act="setStage" data-id="' + esc(o.id) + '" data-svc="' + esc(sid) + '" data-s="' + esc(sg) + '"' + (done ? " disabled" : "") + ' aria-label="Set ' + esc(sv.name || "") + ' to ' + esc(sg) + '"><span class="dot">' + (i < ci ? ic("check") : "") + '</span><span class="nm">' + esc(sg === "Received" ? "Clothes received" : sg === "Ready" ? "Ready" : stepName(o, sid, sg) + " done") + '</span><span class="tm">' + esc(i <= ci ? when(sg) : "") + '</span></button></li>').join("") + '</ol>' +
-      (nx ? '<button class="btn small soft" style="margin-top:6px" data-act="moveOne" data-id="' + esc(o.id) + '" data-svc="' + esc(sid) + '" data-to="' + esc(nx) + '">' + esc(sv.code || "") + ': ' + esc(nx === "Ready" ? "Mark ready" : stepName(o, sid, nx) + " done") + ' ✔</button>' : "") + '</div>';
+      (nx ? '<button class="btn small soft" style="margin-top:6px" data-act="moveOne" data-id="' + esc(o.id) + '" data-svc="' + esc(sid) + '" data-to="' + esc(nx) + '">' + esc(sv.code || "") + ': ' + esc(nx === "Ready" ? "Mark ready" : stepName(o, sid, nx) + " done") + ' ✔</button>' : "") +
+      (undo ? '<button class="btn small ' + (S.armed === undoKey ? 'danger' : 'ghost') + '" style="margin-top:6px" data-act="undoStage" data-id="' + esc(o.id) + '" data-svc="' + esc(sid) + '">' + (S.armed === undoKey ? 'Tap again to confirm undo' + (undo.credits ? ' · reverse ' + undo.credits + ' piece credit' + (undo.credits === 1 ? '' : 's') : '') : 'Undo last process step') + '</button>' : "") + '</div>';
   });
   const order = ["Ready", "Out for delivery", "Delivered"]; const os = o.status === "Partly delivered" ? "Ready" : o.status; const oi = order.indexOf(os);
   const wl = o.status === "Ready" ? waLink(o, waReady(o)) : "";
@@ -2664,7 +2715,7 @@ function progressHtmlBase(o){
     (["Received", "In process"].includes(o.status) ? '<p class="hint" style="margin-top:8px">Dispatch opens when all services are Ready.</p>' : "") + '</div>';
   const swl = waLink(o, statusMessage(o));
   const share = '<div class="svc-block" style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn small ghost" data-act="dlStatus" data-id="' + esc(o.id) + '">' + ic("download") + 'Print status</button>' + (swl ? '<a class="btn small soft" target="_blank" rel="noopener" href="' + swl + '">' + ic("chat") + 'Share status on WhatsApp</a>' : "") + '</div>';
-  return '<div class="card"><div style="display:flex;justify-content:space-between;align-items:center;padding:14px 16px 4px"><b style="color:var(--navy)">Process</b><span class="hint">Tap a stage to correct it</span></div>' + blocks.join("") + disp + share + '</div>';
+  return '<div class="card"><div style="display:flex;justify-content:space-between;align-items:center;padding:14px 16px 4px"><b style="color:var(--navy)">Process</b><span class="hint">Use Undo for a wrong completion</span></div>' + blocks.join("") + disp + share + '</div>';
 }
 
 function accountHtml(o){
@@ -3614,7 +3665,8 @@ const ACT = {
     if (!sid && to === "Out for delivery") { el.disabled = false; S.ui.sr = {ids: [o.id], w: ""}; go("sendRider"); return; }
     if (!sid && to === "Ready" && o.status === "Out for delivery") { if (await guard(() => comeBack(o, new Date().toISOString()), o.no + " back at shop – on its route again")) render(); else el.disabled = false; return; }
     if (await guard(() => sid ? moveSvc(o, sid, to) : setOrderStatus(o, to), o.no + (sid ? " " + ((find("services", sid) || {}).code || "") : "") + " → " + (sid ? (to === "Ready" ? "Ready" : stepName(o, sid, to) + " done") : to))) render(); else el.disabled = false; },
-  setStage: async el => { if (isRider()) return toast("Not allowed in rider login."); const o = find("orders", el.dataset.id); const sid = el.dataset.svc; if (!o || !sid || svcStageOf(o, sid) === el.dataset.s) return; if (!atStore(o)) return toast(notAtStoreMsg(o)); if (o.status === "Out for delivery" && el.dataset.s !== "Ready") return toast("Bring the order back to store first."); if (crossesTracked(o, sid, el.dataset.s)) { openIronSheet([{oid: o.id, sid, to: el.dataset.s}]); return; } if (await guard(() => moveSvc(o, sid, el.dataset.s), ((find("services", sid) || {}).name || "") + " set to " + stepName(o, sid, el.dataset.s))) render(); },
+  undoStage: async el => { if (isRider()) return toast("Not allowed in rider login."); const o = find("orders", el.dataset.id); const sid = el.dataset.svc; const U = undoSvcInfo(o, sid); if (!U) return toast("This process step can no longer be undone."); const key = "undo|" + o.id + "|" + sid; if (S.armed !== key) { S.armed = key; render(); return; } S.armed = null; el.disabled = true; let res; const ok = await guard(async () => { res = await undoSvc(find("orders", o.id), sid); }, "Last process step undone"); if (ok) { toast("Moved back to " + stepName(o, sid, res.prev) + (res.credits ? " · " + res.credits + " piece credit" + (res.credits === 1 ? "" : "s") + " reversed" : "")); render(); } else el.disabled = false; },
+  setStage: async el => { if (isRider()) return toast("Not allowed in rider login."); const o = find("orders", el.dataset.id); const sid = el.dataset.svc; if (!o || !sid || svcStageOf(o, sid) === el.dataset.s) return; if (!atStore(o)) return toast(notAtStoreMsg(o)); const flow = svcFlowOf(o, sid), fromI = flow.indexOf(svcStageOf(o, sid)), toI = flow.indexOf(el.dataset.s); if (toI >= 0 && fromI >= 0 && toI < fromI) return toast("Use Undo last process step so history and worker piece credit stay correct."); if (o.status === "Out for delivery" && el.dataset.s !== "Ready") return toast("Bring the order back to store first."); if (crossesTracked(o, sid, el.dataset.s)) { openIronSheet([{oid: o.id, sid, to: el.dataset.s}]); return; } if (await guard(() => moveSvc(o, sid, el.dataset.s), ((find("services", sid) || {}).name || "") + " set to " + stepName(o, sid, el.dataset.s))) render(); },
   optStage: el => { const sid = S.view.split(":")[1]; const sd = S.draft.svc[sid]; sd.opts = sd.opts || []; const i = sd.opts.indexOf(el.dataset.s); i >= 0 ? sd.opts.splice(i, 1) : sd.opts.push(el.dataset.s); el.setAttribute("aria-pressed", i < 0); },
   stgOpt: el => { formStages(el.dataset.svc)[+el.dataset.i].optional = el.checked; },
   stgTrack: el => { const x = formStages(el.dataset.svc)[+el.dataset.i]; x.track = el.checked; if (el.checked && !x.work) x.work = /iron/i.test(x.name) ? "Ironing" : workTypes()[0]; render(); },
