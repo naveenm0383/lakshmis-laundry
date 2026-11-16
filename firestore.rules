@@ -9,7 +9,7 @@ service cloud.firestore {
     function access() { return get(/databases/$(database)/documents/staffAccess/$(email())).data; }
     function activeStaff() { return owner() || (verified() && accessExists() && access().active == true); }
     function role(r) { return owner() || (activeStaff() && access().role == r); }
-    function manager() { return owner() || role("Store manager"); }
+    function manager() { return owner() || role("Admin") || role("Store manager"); }
     function counter() { return role("Store staff"); }
     function processing() { return role("Processing"); }
     function rider() { return role("Rider"); }
@@ -40,7 +40,7 @@ service cloud.firestore {
 
     match /config/{document} {
       allow read: if activeStaff();
-      allow write: if owner();
+      allow write: if owner() || role("Admin");
     }
 
     match /pub/{document} {
@@ -77,7 +77,7 @@ service cloud.firestore {
     }
 
     match /workers/{id} {
-      allow read: if owner() || (role("Store manager") && resource.data.stores.hasAny(access().stores)) ||
+      allow read: if owner() || ((role("Admin") || role("Store manager")) && resource.data.stores.hasAny(access().stores)) ||
         (activeStaff() && id == workerId());
       allow write: if owner();
     }

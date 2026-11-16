@@ -24,8 +24,10 @@ tracking.
   verified email/password login. A temporary password is never stored in
   Firestore; the employee verifies the email and can use the password setup
   link to choose a private password.
-- Roles: Store manager, Store staff (simple counter), Processing,
-  and Rider. Staff see only the screens needed for their role.
+- Roles: Admin, Store manager, Store staff (simple counter), Processing,
+  and Rider. Admin has full operations for assigned stores, while only the
+  owner can create or approve staff logins. Other staff see only the screens
+  needed for their role.
 - Customer page: public reads are limited to published store/tracking data;
   customers can create pickup requests.
 
