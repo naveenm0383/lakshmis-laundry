@@ -346,7 +346,7 @@ const I = {
 const ic = n => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + (I[n] || "") + '</svg>';
 
 /* ---------- state & data ---------- */
-const APP_VER = 70;
+const APP_VER = 71;
 const COLS = ["stores","employees","customers","services","groups","products","routes","pricelists","colors","vendors","orders","closings","workers","pieceRates","wpays","workTypes","pickups","complaints","trips","rcash","attendance","advances","webreq"];
 const S = { db: null, mode: "connecting", d: Object.fromEntries(COLS.map(c => [c, []])), biz: undefined, counters: {},
   stack: [], view: "home", params: {}, form: null, draft: null, storeId: lsGet("ll_store"), empId: lsGet("ll_emp") || null, isOwner: false, userReady: false, skipSetup: false, ui: {}, armed: null,
@@ -3366,7 +3366,7 @@ async function addStarter(){
 
 const ACT = {
   back, home,
-  googleLogin: async el => { el.disabled = true; S.fireErr = ""; try { const p = new firebase.auth.GoogleAuthProvider(); p.setCustomParameters({prompt:"select_account"}); await firebase.auth().signInWithPopup(p); } catch(e) { console.error(e); S.fireErr = authMessage(e); render(); } },
+  googleLogin: async el => { el.disabled = true; S.fireErr = ""; try { const p = new firebase.auth.GoogleAuthProvider(); p.setCustomParameters({prompt:"select_account"}); await firebase.auth().signInWithRedirect(p); } catch(e) { console.error(e); S.fireErr = authMessage(e); render(); } },
   logout: async () => { await firebase.auth().signOut(); location.reload(); },
   passwordReset: async () => { const input = document.getElementById("loginEmail"); const email = String((input && input.value) || "").trim().toLowerCase(); if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { if (input) input.focus(); return toast("Enter your email address first."); } try { await firebase.auth().sendPasswordResetEmail(email); toast("Password setup email sent. Check inbox and spam."); } catch(e) { console.error(e); toast(authMessage(e)); } },
   staffPasswordEmail: async el => { if (!S.isOwner) return; const email = String(el.dataset.email || "").trim().toLowerCase(); if (!email) return; el.disabled = true; try { await firebase.auth().sendPasswordResetEmail(email); toast("Password setup email sent to " + email); } catch(e) { console.error(e); toast(authMessage(e)); } finally { el.disabled = false; } },
