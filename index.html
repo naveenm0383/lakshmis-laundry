@@ -346,7 +346,7 @@ const I = {
 const ic = n => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + (I[n] || "") + '</svg>';
 
 /* ---------- state & data ---------- */
-const APP_VER = 76;
+const APP_VER = 77;
 const COLS = ["stores","employees","customers","services","groups","products","routes","pricelists","colors","vendors","orders","closings","workers","pieceRates","wpays","workTypes","pickups","complaints","trips","rcash","attendance","advances","webreq"];
 const S = { db: null, mode: "connecting", d: Object.fromEntries(COLS.map(c => [c, []])), biz: undefined, counters: {},
   stack: [], view: "home", params: {}, form: null, draft: null, storeId: lsGet("ll_store"), empId: lsGet("ll_emp") || null, isOwner: false, userReady: false, skipSetup: false, ui: {}, armed: null,
@@ -399,7 +399,7 @@ function applyHindi(view){
 const myWorker = () => { const e = currentEmp(); if (!e) return null; const lk = S.d.workers.find(w => w.empLink === e.id) || (e.workerId && find("workers", e.workerId)); if (lk) return lk; const m = String(e.mobile || "").replace(/\D/g, "").slice(-10); return S.d.workers.find(w => m && String(w.mobile || "").replace(/\D/g, "").slice(-10) === m) || S.d.workers.find(w => String(w.name || "").trim().toLowerCase() === String(e.name || "").trim().toLowerCase()) || null; };
 const empName = () => { const e = currentEmp(); return e ? e.name : (S.isOwner ? "Owner" : ""); };
 function allowedStores(){ const e = currentEmp(); const all = sorted("stores"); if (!e || e.owner) return all; return all.filter(s => (e.stores || []).includes(s.id)); }
-function tabsFor(){ const r = roleOf(); return [["home","list","Transactions"], ...(r === "Admin" || r === "Store manager" ? [["masters","gear","Masters"],["mis","chart","MIS"]] : r === "Processing" || r === "Iron man" || r === "Rider" ? [["mis","chart","My work"]] : [])]; }
+function tabsFor(){ const r = roleOf(); return [["home","list","Transactions"], ...(r === "Admin" || r === "Store manager" ? [["masters","gear","Setup"],["mis","chart","Reports"]] : r === "Processing" || r === "Iron man" || r === "Rider" ? [["mis","chart","My work"]] : [])]; }
 async function sha(t){ /* compact SHA-256, same result on every device */
   const K = [], H = []; let n = 2, c = 0; const isP = x => { for (let i = 2; i * i <= x; i++) if (x % i === 0) return false; return true; };
   while (c < 64) { if (isP(n)) { if (c < 8) H[c] = (Math.pow(n, 1 / 2) * 2 ** 32) | 0; K[c++] = (Math.pow(n, 1 / 3) * 2 ** 32) | 0; } n++; }
@@ -705,7 +705,7 @@ VIEWS.counterHome = () => { const st = store(), b = S.biz || {}, e = currentEmp(
     '<button class="tile" data-act="go" data-v="orders"><span class="ic">' + ic("search") + '</span><b>Find order</b><small>Name, mobile or bill no.</small></button>' +
     '<button class="tile" data-act="go" data-v="dues"><span class="ic">' + ic("receipt") + '</span><b>Receive payment</b><small>' + money(due) + ' pending</small></button>' +
     '<button class="tile" data-act="go" data-v="dispatch"><span class="ic">' + ic("check") + '</span><b>Give clothes</b><small>' + ready + ' ready</small></button></div>' +
-    '<p class="sec-title">Also available</p><div class="tiles"><button class="tile" data-act="go" data-v="rptPickups"><span class="ic">' + ic("truck") + '</span><b>Receive pickup</b></button><button class="tile" data-act="go" data-v="complaints"><span class="ic">' + ic("chat") + '</span><b>Customer complaint</b></button></div>'}; };
+    '<p class="sec-title">Also available</p><div class="tiles"><button class="tile" data-act="go" data-v="rptStaffWork"><span class="ic">' + ic("cal") + '</span><b>My activity</b><small>Today or chosen dates</small></button><button class="tile" data-act="go" data-v="rptPickups"><span class="ic">' + ic("truck") + '</span><b>Receive pickup</b></button><button class="tile" data-act="go" data-v="complaints"><span class="ic">' + ic("chat") + '</span><b>Customer complaint</b></button></div>'}; };
 
 VIEWS.home = () => {
   if (isRider() && store()) return VIEWS.riderHome();
@@ -815,7 +815,7 @@ function ageOf(iso){ const h = Math.max(0, (Date.now() - new Date(iso).getTime()
 VIEWS.mis = () => {
   if (isIron()) return VIEWS.ironMis();
   if (isRider()) return VIEWS.riderMis();
-  const st = store(); if (!st) return { title: "MIS", back: false, nav: "mis", body: '<div class="empty"><div class="ic">' + ic("chart") + '</div><h2>No store yet</h2><p class="hint">Set up a store in Masters to see reports.</p></div>' };
+  const st = store(); if (!st) return { title: "Reports", back: false, nav: "mis", body: '<div class="empty"><div class="ic">' + ic("chart") + '</div><h2>No store yet</h2><p class="hint">Set up a store in Setup to see reports.</p></div>' };
   const pk = S.ui.period || "today"; const [from, to] = periodRange(pk); const inR = d => d && d >= from && d <= to;
   const mine = liveOrders(st);
   const booked = mine.filter(o => inR(o.date)); const bVal = booked.reduce((a, o) => a + +o.total, 0); const bPcs = booked.reduce((a, o) => a + (+o.pieces || 0), 0);
@@ -831,10 +831,10 @@ VIEWS.mis = () => {
   const bk = bookSummary(st, from, to);
   const R = (a, b, c, k, strong) => '<tr class="' + (k ? "clk" : "") + '"' + (k ? ' data-act="drill" data-k="' + esc(k) + '" tabindex="0"' : "") + (strong ? ' style="font-weight:700"' : "") + '><td>' + a + '</td><td class="r">' + b + '</td>' + (c !== undefined ? '<td class="r">' + c + '</td>' : "") + (k ? '<td class="chev">›</td>' : '<td></td>') + '</tr>';
   const T = (k, val, lab, extra) => '<button class="stat clk" data-act="' + (k.startsWith("go:") ? "go" : "drill") + '" ' + (k.startsWith("go:") ? 'data-v="' + k.slice(3) + '"' : 'data-k="' + k + '"') + (extra || "") + '><b>' + val + '</b><span>' + lab + '</span></button>';
-  return { title: "MIS", back: false, storePick: true, nav: "mis", right: '<button class="btn small ghost" data-act="go" data-v="export">' + ic("download") + 'Excel</button>',
+  return { title: "Reports", back: false, storePick: true, nav: "mis", right: '<button class="btn small ghost" data-act="go" data-v="export">' + ic("download") + 'Excel</button>',
     body: '<div class="chips" role="group" aria-label="Period">' + PERIODS.map(([k, l]) => '<button class="chip" data-act="period" data-p="' + k + '" aria-pressed="' + (k === pk) + '">' + l + '</button>').join("") + '</div>' +
       '<p class="hint">' + (pk === "all" ? "All dates" : esc(fmtDate(from)) + (from !== to ? " to " + esc(fmtDate(to)) : "")) + ' · ' + esc(st.name) + ' · tap any figure for the breakup</p>' +
-      '<p class="sec-title">Reports</p><div class="tiles rtiles">' + [["rptStage", "layers", "Stage-wise MIS"], ["rptOverdue", "warn", "Overdue bills"], ["rptBills", "receipt", "Bill-wise report"], ["rptWorkers", "users", "Worker report"], ["rptComplaints", "chat", "Complaints report"], ["rptRework", "repeat", "Re-work report"], ["rptRiders", "bike", "Rider report"], ...(canPayroll() ? [["attMonth", "cal", "Attendance sheet"], ["salReg", "sheet", "Pay sheet"], ["advances", "rupee", "Advances outstanding"], ["rptLabour", "chart", "Labour cost"]] : []), ...(isAdmin() || allowedStores().length > 1 ? [["rptStores", "store", "Store-wise statistics"]] : [])].map(([v, i, l]) => '<button class="tile" data-act="go" data-v="' + v + '"><span class="ic">' + ic(i) + '</span><b>' + l + '</b></button>').join("") + '</div>' +
+      '<p class="sec-title">Reports</p><div class="tiles rtiles">' + [["rptStage", "layers", "Work stages"], ["rptOverdue", "warn", "Late bills"], ["rptBills", "receipt", "Bills"], ["rptWorkers", "users", "Piece work"], ["rptStaffWork", "cal", "Staff activity"], ["rptComplaints", "chat", "Complaints"], ["rptRework", "repeat", "Re-work"], ["rptRiders", "bike", "Rider work"], ...(canPayroll() ? [["attMonth", "cal", "Attendance"], ["salReg", "sheet", "Salary"], ["advances", "rupee", "Advances"], ["rptLabour", "chart", "Staff cost"]] : []), ...(isAdmin() || allowedStores().length > 1 ? [["rptStores", "store", "Store summary"]] : [])].map(([v, i, l]) => '<button class="tile" data-act="go" data-v="' + v + '"><span class="ic">' + ic(i) + '</span><b>' + l + '</b></button>').join("") + '</div>' +
       '<p class="sec-title">Summary</p><div class="stats">' + T("booked", money(bVal), "Booked · " + booked.length + " bills") + T("coll", money(coll), "Collected · " + pays.length + " entries") + T("deliv", delPcs, "Pcs delivered · " + delivs.length) + '</div>' +
       '<p class="sec-title">Follow-up · as on now</p><div class="stats" style="grid-template-columns:1fr 1fr">' +
         T("go:rptPickups", pp.length, "Pending pickups" + (odP ? ' · <b style="color:var(--danger);font-size:12px;display:inline">' + odP + ' late</b>' : "")) +
@@ -890,6 +890,51 @@ function stageItems(st){ /* every open item as on now: {kind:"o"|"p", x, stage, 
   return out;
 }
 const periodHead = () => { const pk = S.ui.period || "today"; const [from, to] = periodRange(pk); return '<div class="chips" role="group" aria-label="Period">' + PERIODS.map(([k, l]) => '<button class="chip" data-act="period" data-p="' + k + '" aria-pressed="' + (k === pk) + '">' + l + '</button>').join("") + '</div><p class="hint">' + (pk === "all" ? "All dates" : esc(fmtDate(from)) + (from !== to ? " to " + esc(fmtDate(to)) : "")) + '</p>'; };
+const SW_PERIODS = [["today","Today"],["yday","Yesterday"],["7d","Last 7 days"],["month","This month"],["custom","Choose dates"]];
+function staffWorkRange(){ const k = S.ui.swPeriod || "today"; if (k !== "custom") return periodRange(k); const t = todayStr(); let from = S.ui.swFrom || t, to = S.ui.swTo || t; if (from > to) [from, to] = [to, from]; return [from, to]; }
+function staffWorkRows(st){
+  const [from, to] = staffWorkRange(), inR = d => d && d >= from && d <= to, nk = nameKey;
+  const staffView = !S.isOwner && !["Admin","Store manager"].includes(roleOf());
+  const emp = currentEmp(), own = myWorker() || (emp ? {...emp, id: emp.workerId || emp.id, stores: emp.stores || []} : null);
+  const workers = staffView ? (own ? [own] : []) : S.d.workers.filter(w => !(w.stores || []).length || (w.stores || []).includes(st.id));
+  return workers.map(w => {
+    const att = S.d.attendance.filter(a => a.storeId === st.id && a.w === w.id && inR(a.date));
+    const attDays = new Set(att.filter(a => a.in || ["P","H"].includes(a.st)).map(a => a.date)).size;
+    const mins = att.reduce((n, a) => n + workedMin(a), 0);
+    const work = ironLedger(st, w.id).filter(x => inR(x.date) && x.q > 0 && !x.rider);
+    const pieces = work.reduce((n, x) => n + x.q, 0), procOrders = new Set(work.map(x => x.o && x.o.id).filter(Boolean)).size;
+    const booked = S.d.orders.filter(o => o.storeId === st.id && inR(o.date) && nk(o.by) === nk(w.name));
+    const deliveries = [], payments = [];
+    S.d.orders.filter(o => o.storeId === st.id).forEach(o => {
+      (o.deliveries || []).forEach(d => { if (inR(d.date) && nk(d.by) === nk(w.name)) deliveries.push({o, d}); });
+      (o.payments || []).forEach(p => { if (inR(p.date) && nk(p.by) === nk(w.name) && +p.amount > 0) payments.push({o, p}); });
+    });
+    const deliveredPcs = deliveries.reduce((n, x) => n + Object.values(x.d.lines || {}).reduce((s, q) => s + (+q || 0), 0), 0);
+    const trips = S.d.trips.filter(t => t.storeId === st.id && t.rider === w.id); let stops = 0; const stopAts = [];
+    trips.forEach(t => (t.stops || []).forEach(s => { const d = String(s.at || "").slice(0, 10); if (s.st === "Done" && inR(d)) { stops++; if (s.at) stopAts.push(s.at); } }));
+    const collected = r2(payments.reduce((n, x) => n + +x.p.amount, 0));
+    const ats = [...att.flatMap(a => [a.in, a.out]), ...work.map(x => x.at), ...booked.map(o => o.createdAt), ...deliveries.map(x => x.d.at), ...payments.map(x => x.p.at), ...stopAts].filter(Boolean).sort();
+    const activity = attDays + pieces + booked.length + procOrders + deliveries.length + stops + payments.length;
+    return {w, attDays, mins, booked: booked.length, procOrders, pieces, deliveries: deliveries.length, deliveredPcs, stops, collected, last: ats.length ? ats[ats.length - 1] : "", activity};
+  }).sort((a, b) => (b.activity > 0) - (a.activity > 0) || b.activity - a.activity || byName(a.w, b.w));
+}
+VIEWS.rptStaffWork = () => {
+  const st = store(), staffView = !S.isOwner && !["Admin","Store manager"].includes(roleOf()), k = S.ui.swPeriod || "today", [from, to] = staffWorkRange(), all = staffWorkRows(st), workedOnly = staffView || S.ui.swShow !== "all"; const rows = staffView ? all : workedOnly ? all.filter(r => r.activity > 0) : all;
+  const sum = key => rows.reduce((n, r) => n + (+r[key] || 0), 0);
+  const mine = rows[0] || {attDays:0, mins:0, booked:0, procOrders:0, pieces:0, deliveries:0, deliveredPcs:0, stops:0, collected:0, last:"", activity:0};
+  const staffBody = '<div class="stats"><div class="stat"><b>' + mine.attDays + '</b><span>Days worked</span></div><div class="stat"><b>' + (mine.mins ? esc(fmtHM(mine.mins)) : "0") + '</b><span>Hours</span></div><div class="stat"><b>' + mine.pieces + '</b><span>Pieces done</span></div></div>' +
+    '<div class="card pad"><div class="sumrow"><span>Orders made</span><b>' + mine.booked + '</b></div><div class="sumrow"><span>Orders worked</span><b>' + mine.procOrders + '</b></div><div class="sumrow"><span>Deliveries</span><b>' + mine.deliveries + '</b></div><div class="sumrow"><span>Pieces given</span><b>' + mine.deliveredPcs + '</b></div><div class="sumrow"><span>Rider stops</span><b>' + mine.stops + '</b></div><div class="sumrow"><span>Money collected</span><b>' + money(mine.collected) + '</b></div><div class="sumrow"><span>Last work</span><b>' + (mine.last ? esc(fmtTime(mine.last)) : "–") + '</b></div></div>' + (mine.activity ? '' : '<p class="hint">No work is recorded for these dates.</p>');
+  return { title: staffView ? "My activity" : "Staff activity", homeBtn: true, storePick: true, right: staffView ? "" : '<button class="btn small ghost" data-act="swCsv">' + ic("download") + 'Download</button>',
+    body: '<div class="chips" role="group" aria-label="Staff work period">' + SW_PERIODS.map(([x, l]) => '<button class="chip" data-act="swPeriod" data-p="' + x + '" aria-pressed="' + (x === k) + '">' + l + '</button>').join("") + '</div>' +
+      (k === "custom" ? '<div class="card pad" style="display:grid;grid-template-columns:1fr 1fr;gap:10px"><label class="f" for="swFrom"><span>From</span><input class="in" id="swFrom" type="date" max="' + todayStr() + '" value="' + esc(from) + '"></label><label class="f" for="swTo"><span>To</span><input class="in" id="swTo" type="date" max="' + todayStr() + '" value="' + esc(to) + '"></label></div>' : '') +
+      '<p class="hint">' + esc(fmtDate(from)) + (from !== to ? " to " + esc(fmtDate(to)) : "") + ' · ' + esc(st.name) + '</p>' +
+      (staffView ? staffBody : '<div class="seg"><button data-act="swShow" data-v="worked" aria-pressed="' + workedOnly + '">Worked</button><button data-act="swShow" data-v="all" aria-pressed="' + (!workedOnly) + '">All staff</button></div>' +
+      '<div class="stats" style="grid-template-columns:repeat(3,1fr)"><div class="stat"><b>' + rows.filter(r => r.activity > 0).length + '</b><span>Staff worked</span></div><div class="stat"><b>' + sum("pieces") + '</b><span>Pieces done</span></div><div class="stat"><b>' + money(sum("collected")) + '</b><span>Money collected</span></div></div>' +
+      (rows.length ? '<div class="card pad"><div class="scroll-x"><table class="t mis rtable"><thead><tr><th>Staff</th><th>Role</th><th class="r">Days</th><th class="r">Hours</th><th class="r">Orders made</th><th class="r">Orders worked</th><th class="r">Pieces</th><th class="r">Deliveries</th><th class="r">Pieces given</th><th class="r">Stops</th><th class="r">Money collected</th><th>Last work</th></tr></thead>' +
+        rows.map(r => '<tr><td><b>' + esc(r.w.name) + '</b>' + (r.w.active === false ? ' <span class="pill">Inactive</span>' : '') + '</td><td>' + esc(r.w.role || "Staff") + '</td><td class="r">' + r.attDays + '</td><td class="r">' + (r.mins ? esc(fmtHM(r.mins)) : "–") + '</td><td class="r">' + r.booked + '</td><td class="r">' + r.procOrders + '</td><td class="r">' + r.pieces + '</td><td class="r">' + r.deliveries + '</td><td class="r">' + r.deliveredPcs + '</td><td class="r">' + r.stops + '</td><td class="r">' + money(r.collected) + '</td><td>' + (r.last ? esc(fmtTime(r.last)) : "–") + '</td></tr>').join("") + '</table></div><p class="hint">Attendance counts present/half days or self check-ins. Processed work comes from recorded piece work. Booked, delivered and collected use the staff name saved on each transaction. Rider stops come from completed trip stops.</p></div>' : '<div class="empty"><h2>No staff activity</h2><p class="hint">Change the date filter or choose All staff.</p></div>')),
+    after: () => { const f = document.getElementById("swFrom"), t = document.getElementById("swTo"); if (f) f.onchange = () => { S.ui.swFrom = f.value || todayStr(); render(); }; if (t) t.onchange = () => { S.ui.swTo = t.value || todayStr(); render(); }; } };
+};
+function swExport(){ const st = store(), [from, to] = staffWorkRange(), rows = staffWorkRows(st).filter(r => S.ui.swShow === "all" || r.activity > 0); const q = v => '"' + String(v == null ? "" : v).replace(/"/g, '""') + '"'; const data = [["Staff","Role","Attendance days","Hours","Orders booked","Orders processed","Pieces processed","Deliveries","Pieces delivered","Rider stops","Collected","Last activity"], ...rows.map(r => [r.w.name,r.w.role || "Staff",r.attDays,(r.mins/60).toFixed(2),r.booked,r.procOrders,r.pieces,r.deliveries,r.deliveredPcs,r.stops,r.collected,r.last ? fmtTime(r.last) : ""])]; const csv = "\ufeff" + data.map(row => row.map(q).join(",")).join("\r\n"); download("staff-work-" + from + "-to-" + to + ".csv", new TextEncoder().encode(csv)); }
 VIEWS.rptStage = (sgi) => {
   const st = store(); const items = stageItems(st); const SO = stageOrder(st); const sg = sgi !== undefined && sgi !== "" ? SO[+sgi] : null;
   if (sg) { const list = items.filter(i => i.stage === sg).sort((a, b) => b.age - a.age);
@@ -899,7 +944,7 @@ VIEWS.rptStage = (sgi) => {
   const rows = SO.map(name => { const l = items.filter(i => i.stage === name); const b = [0, 0, 0]; l.forEach(i => b[ageBucket(i.age)]++); return {name, n: l.length, pcs: l.reduce((a, i) => a + i.pcs, 0), b}; }).filter(r => r.n || !/factory|Partly/.test(r.name));
   const tot = rows.reduce((a, r) => ({n: a.n + r.n, pcs: a.pcs + r.pcs, b: a.b.map((v, k) => v + r.b[k])}), {n: 0, pcs: 0, b: [0, 0, 0]});
   const care = items.filter(i => i.kind === "o" && careOn(i.x)).length;
-  return { title: "Stage-wise MIS", homeBtn: true, storePick: true,
+  return { title: "Work stages", homeBtn: true, storePick: true,
     body: '<p class="hint">As on now · ' + esc(st.name) + ' · age counted from booking. Tap a row for the bill list.</p>' +
       '<div class="stats" style="grid-template-columns:1fr 1fr 1fr"><div class="stat"><b>' + tot.n + '</b><span>Open bills / pickups</span></div><div class="stat"><b>' + tot.pcs + '</b><span>Pieces in hand</span></div><button class="stat clk" data-act="go" data-v="process"><b style="color:var(--danger)">' + care + '</b><span>⚑ Special care</span></button></div>' +
       '<div class="card pad"><div class="scroll-x"><table class="t mis rtable"><thead><tr><th>Stage</th><th class="r">Bills</th><th class="r">Pcs</th><th class="r">0–1 d</th><th class="r">2–3 d</th><th class="r">&gt;3 d</th><th></th></tr></thead>' +
@@ -910,7 +955,7 @@ VIEWS.rptStage = (sgi) => {
 VIEWS.rptOverdue = () => {
   const st = store(); const t = todayStr(); const list = pendingDelivery(st).filter(o => o.deliveryDate < t).map(o => ({o, d: Math.round((new Date(t) - new Date(o.deliveryDate)) / 864e5)})).sort((a, b) => b.d - a.d);
   const bucket = x => x.d <= 1 ? "1 day" : x.d <= 3 ? "2–3 days" : x.d <= 7 ? "4–7 days" : "More than 7 days";
-  return { title: "Overdue bills", homeBtn: true, storePick: true,
+  return { title: "Late bills", homeBtn: true, storePick: true,
     body: '<p class="hint">Past the promised delivery date and not yet fully delivered · as on now · ' + esc(st.name) + '</p>' +
       '<div class="stats"><div class="stat"><b style="color:var(--danger)">' + list.length + '</b><span>Bills overdue</span></div><div class="stat"><b>' + list.reduce((a, x) => a + pendPcs(x.o), 0) + '</b><span>Pieces</span></div><div class="stat"><b>' + money(list.reduce((a, x) => a + Math.max(0, balOf(x.o)), 0)) + '</b><span>Balance to collect</span></div></div>' +
       (list.length ? groupBy(list, bucket, ["More than 7 days", "4–7 days", "2–3 days", "1 day"]).map(([k, xs]) => '<p class="sec-title" style="color:var(--danger)">Overdue ' + k + ' · ' + xs.length + '</p><div class="card">' + xs.map(x => rptCard(x.o, '<b style="color:var(--danger)">' + x.d + ' day(s) overdue</b> · promised ' + esc(fmtDate(x.o.deliveryDate)) + ' · now: <b>' + esc(billStage(x.o)) + '</b><br>' + pendPcs(x.o) + ' pcs pending · balance ' + money(balOf(x.o)) + ' · ' + esc([...new Set(x.o.lines.map(l => l.svcCode))].join(", ")))).join("") + '</div>').join("")
@@ -922,7 +967,7 @@ VIEWS.rptWorkers = () => {
   const rows = ids.map(id => { const w = find("workers", id) || {id, name: "—"}; const e = L.filter(x => x.w === id); const ep = e.filter(x => inR(x.date)); const pays = S.d.wpays.filter(p => p.storeId === st.id && p.w === id);
     return {w, pcs: ep.reduce((a, x) => a + x.q, 0), rw: ep.filter(x => x.q < 0).length, earned: r2(ep.reduce((a, x) => a + x.amt, 0)), paid: r2(pays.filter(p => inR(p.date)).reduce((a, p) => a + +p.amount, 0)), bal: r2(e.reduce((a, x) => a + x.amt, 0) - pays.reduce((a, p) => a + +p.amount, 0))}; }).sort((a, b) => b.pcs - a.pcs);
   const T = rows.reduce((a, r) => ({pcs: a.pcs + r.pcs, rw: a.rw + r.rw, earned: a.earned + r.earned, paid: a.paid + r.paid, bal: a.bal + r.bal}), {pcs: 0, rw: 0, earned: 0, paid: 0, bal: 0});
-  return { title: "Worker report", homeBtn: true, storePick: true,
+  return { title: "Piece work", homeBtn: true, storePick: true,
     body: periodHead() + '<div class="stats"><div class="stat"><b>' + T.pcs + '</b><span>Pieces done</span></div><div class="stat"><b>' + money(T.earned) + '</b><span>Earned in period</span></div><div class="stat"><b>' + money(T.bal) + '</b><span>Payable as on now</span></div></div>' +
       '<div class="card pad"><div class="scroll-x"><table class="t mis rtable"><thead><tr><th>Worker</th><th class="r">Pcs</th><th class="r">Re-work</th><th class="r">Earned</th><th class="r">Paid</th><th class="r">Balance now</th><th></th></tr></thead>' +
       rows.map(r => '<tr class="clk" data-act="go" data-v="worker:' + esc(r.w.id) + '"><td>' + esc(r.w.name) + (!piecePaid(r.w) ? ' <span class="pill">' + esc(payType(r.w)) + '</span>' : "") + '</td><td class="r">' + r.pcs + '</td><td class="r"' + (r.rw ? ' style="color:var(--danger)"' : "") + '>' + r.rw + '</td><td class="r">' + money(r.earned) + '</td><td class="r">' + money(r.paid) + '</td><td class="r"><b>' + money(r.bal) + '</b></td><td class="chev">›</td></tr>').join("") +
@@ -944,7 +989,7 @@ VIEWS.rptStores = () => {
   const sum = k => rows.reduce((a, r) => a + r.s[k], 0);
   const COLS = [["bills", "Bills", 0], ["pcs", "Pcs", 0], ["val", "Booked", 1], ["coll", "Collected", 1], ["avg", "Avg bill", 1], ["adj", "Discounts", 1], ["work", "Pcs finished", 0], ["pend", "In process", 0], ["overdue", "Overdue", 0], ["pickups", "Pickups open", 0], ["atFac", "At factory", 0], ["dues", "Receivable", 1], ["rework", "Re-work", 0], ["cmpNew", "Complaints", 0], ["cmpOpen", "Open compl.", 0], ["cancel", "Cancelled", 0]];
   const cell = (k, v, m) => '<td class="r"' + ((k === "overdue" || k === "rework" || k === "cancel" || k === "cmpOpen") && v ? ' style="color:var(--danger);font-weight:700"' : "") + '>' + (m ? money(v) : v) + '</td>';
-  return { title: "Store-wise statistics", homeBtn: true,
+  return { title: "Store summary", homeBtn: true,
     body: periodHead() + '<div class="stats"><div class="stat"><b>' + money(sum("val")) + '</b><span>Booked · ' + sum("bills") + ' bills</span></div><div class="stat"><b>' + money(sum("coll")) + '</b><span>Collected</span></div><div class="stat"><b>' + money(sum("dues")) + '</b><span>Receivable now</span></div></div>' +
       '<div class="card pad"><div class="scroll-x"><table class="t mis rtable"><thead><tr><th>Store</th>' + COLS.map(c => '<th class="r">' + c[1] + '</th>').join("") + '</tr></thead>' +
       rows.map(r => '<tr class="clk" data-act="misStore" data-id="' + esc(r.st.id) + '"><td><b>' + esc(r.st.name) + '</b>' + (r.st.type === "Factory" ? ' <span class="pill">Factory</span>' : "") + '</td>' + COLS.map(c => cell(c[0], r.s[c[0]], c[2])).join("") + '</tr>').join("") +
@@ -1075,7 +1120,7 @@ VIEWS.rptComplaints = () => {
   const comp = r2(res.reduce((a, c) => a + (+c.res.amount || 0), 0));
   const cats = CMP_CATS.map(k => [k, reg.filter(c => c.cat === k).length, res.filter(c => c.cat === k).length, open.filter(c => c.cat === k).length]).filter(r => r[1] || r[2] || r[3]);
   const acts = CMP_ACTIONS.map(([k, l]) => [l, res.filter(c => c.res.action === k).length, r2(res.filter(c => c.res.action === k).reduce((a, c) => a + (+c.res.amount || 0), 0))]).filter(r => r[1]);
-  return { title: "Complaints report", homeBtn: true, storePick: true,
+  return { title: "Complaints", homeBtn: true, storePick: true,
     body: periodHead() + '<div class="stats"><div class="stat"><b>' + reg.length + '</b><span>Registered</span></div><div class="stat"><b>' + res.length + '</b><span>Resolved · avg ' + avg + ' days</span></div><button class="stat clk" data-act="go" data-v="complaints"><b style="color:var(--danger)">' + open.length + '</b><span>Open now ›</span></button></div>' +
       '<p class="sec-title">By type</p><div class="card pad">' + (cats.length ? '<table class="t mis"><thead><tr><th>Type</th><th class="r">Registered</th><th class="r">Resolved</th><th class="r">Open now</th></tr></thead>' + cats.map(r => '<tr><td>' + esc(r[0]) + '</td><td class="r">' + r[1] + '</td><td class="r">' + r[2] + '</td><td class="r"' + (r[3] ? ' style="color:var(--danger);font-weight:700"' : "") + '>' + r[3] + '</td></tr>').join("") + '</table>' : '<p class="hint">No complaints in this period.</p>') + '</div>' +
       '<p class="sec-title">How resolved · cost ' + money(comp) + '</p><div class="card pad">' + (acts.length ? '<table class="t mis"><thead><tr><th>Action</th><th class="r">Count</th><th class="r">Amount</th></tr></thead>' + acts.map(r => '<tr><td>' + esc(r[0]) + '</td><td class="r">' + r[1] + '</td><td class="r">' + money(r[2]) + '</td></tr>').join("") + '</table>' : '<p class="hint">Nothing resolved in this period.</p>') + '</div>' +
@@ -1094,7 +1139,7 @@ VIEWS.rptRework = () => {
   const byReason = {}; rows.forEach(r => { const g = byReason[r.reason || "Not given"] ||= {n: 0, pcs: 0}; g.n++; g.pcs += r.pcs; });
   const byW = {}; rows.forEach(r => Object.entries(r.ws).forEach(([w, n]) => byW[w] = (byW[w] || 0) + n));
   const MODE = {free: "Free", half: "50% charge", full: "Full charge"};
-  return { title: "Re-work report", homeBtn: true, storePick: true,
+  return { title: "Re-work", homeBtn: true, storePick: true,
     body: periodHead() + '<div class="stats"><div class="stat"><b>' + rows.length + '</b><span>Re-work bills</span></div><div class="stat"><b>' + rPcs + '</b><span>Pieces re-done</span></div><div class="stat"><b' + (bPcs && rPcs / bPcs > 0.02 ? ' style="color:var(--danger)"' : "") + '>' + (bPcs ? r2(rPcs * 100 / bPcs) + "%" : "–") + '</b><span>Of pieces booked (' + bPcs + ')</span></div></div>' +
       '<p class="sec-title">By reason</p><div class="card pad">' + (rows.length ? '<table class="t mis"><thead><tr><th>Reason</th><th class="r">Bills</th><th class="r">Pcs</th></tr></thead>' + Object.entries(byReason).sort((a, b) => b[1].pcs - a[1].pcs).map(([k, g]) => '<tr><td>' + esc(k) + '</td><td class="r">' + g.n + '</td><td class="r">' + g.pcs + '</td></tr>').join("") + '</table>' : '<p class="hint">No re-work in this period.</p>') + '</div>' +
       '<p class="sec-title">By original iron man / worker</p><div class="card pad">' + (Object.keys(byW).length ? '<table class="t mis"><thead><tr><th>Worker who did the original work</th><th class="r">Pcs returned</th></tr></thead>' + Object.entries(byW).sort((a, b) => b[1] - a[1]).map(([w, n]) => '<tr><td>' + esc(w) + '</td><td class="r"' + (n ? ' style="color:var(--danger);font-weight:700"' : "") + '>' + n + '</td></tr>').join("") + '</table><p class="hint">The original worker\'s piece credit is reversed when the re-work is finished by someone (see Worker report).</p>' : '<p class="hint">No data.</p>') + '</div>' +
@@ -1164,7 +1209,7 @@ VIEWS.ironHome = () => {
     body: brandHead(b, esc(e.name || "") + ' · ' + esc(st.name) + ' · ' + esc(fmtDate(t0))) + myAttMini(st) +
       (!me ? '<div class="notice">' + ic("warn") + '<div>Your login is not linked to a staff record. Ask the manager to switch on Uses the app in Masters → Staff.</div></div>' : "") +
       '<div class="stats"><div class="stat"><b>' + pcs + '</b><span>My pieces today</span></div><div class="stat"><b>' + money(earned) + '</b><span>Earned today</span></div><div class="stat"><b style="color:var(--warn)">' + money(cash) + '</b><span>Cash in hand</span></div></div>' +
-      '<div class="tiles">' + tile("newOrder", "", "plus", "Create order") + tile("go", ' data-v="process"', "layers", "Finishing work") + tile("go", ' data-v="orders"', "search", "Track orders") + tile("go", ' data-v="mis"', "chart", "My work &amp; pay") + '</div>' +
+      '<div class="tiles">' + tile("newOrder", "", "plus", "Create order") + tile("go", ' data-v="process"', "layers", "Finishing work") + tile("go", ' data-v="orders"', "search", "Track orders") + tile("go", ' data-v="rptStaffWork"', "cal", "My activity") + tile("go", ' data-v="mis"', "chart", "My work &amp; pay") + '</div>' +
       (cash > 0 ? '<p class="hint">Hand over the cash in hand to the admin. It is recorded against your name until then.</p>' : "") };
 };
 VIEWS.ironMis = () => {
@@ -1228,7 +1273,7 @@ VIEWS.riderHome = () => {
       '<div class="stats"><div class="stat"><b>' + doneToday + '</b><span>Stops done today</span></div><div class="stat"><b style="color:var(--warn)">' + money(cash) + '</b><span>Cash in hand</span></div><div class="stat"><b>' + money(earned) + '</b><span>Earned today</span></div></div>' +
       '<p class="sec-title">Routes – pickups &amp; deliveries waiting</p>' + (rids.length ? '<div class="card list">' + rids.map(r => { const l = stops.filter(x => x.route === r); const pk = l.filter(x => x.grp === "pickup").length, dl = l.filter(x => x.grp !== "pickup").length;
         return '<button class="item" data-act="go" data-v="routePlan:' + esc(r || "none") + '"><div class="grow"><div class="t"' + (r ? "" : ' style="color:var(--danger)"') + '>' + esc(routeName(r)) + '</div><div class="s"><b class="rcnt pk' + (pk ? "" : " z") + '">' + pk + '</b> pickup' + (pk === 1 ? "" : "s") + ' · <b class="rcnt dl' + (dl ? "" : " z") + '">' + dl + '</b> deliver' + (dl === 1 ? "y" : "ies") + ' · collect <b class="rcnt amt">' + money(l.reduce((a, x) => a + x.amt, 0)) + '</b></div></div><span class="chev">›</span></button>'; }).join("") + '</div>' : '<p class="hint">Nothing waiting on any route.</p>') +
-      '<div class="tiles"><button class="tile" data-act="newOrder"><span class="ic">' + ic("plus") + '</span><b>Walk-in order at store</b></button><button class="tile" data-act="doorOrder"><span class="ic">' + ic("truck") + '</span><b>Order at customer\'s door</b></button><button class="tile" data-act="go" data-v="dispatch"><span class="ic">' + ic("check") + '</span><b>Deliver orders</b></button><button class="tile" data-act="go" data-v="orders"><span class="ic">' + ic("search") + '</span><b>Track orders</b></button><button class="tile" data-act="go" data-v="myTrips"><span class="ic">' + ic("bike") + '</span><b>My trips</b><small' + (open.length ? ' style="color:var(--danger);font-weight:700">' + open.length + ' open' : '>No open trip') + '</small></button><button class="tile" data-act="go" data-v="complaints"><span class="ic">' + ic("chat") + '</span><b>Complaints</b></button></div>' };
+      '<div class="tiles"><button class="tile" data-act="newOrder"><span class="ic">' + ic("plus") + '</span><b>Walk-in order at store</b></button><button class="tile" data-act="doorOrder"><span class="ic">' + ic("truck") + '</span><b>Order at customer\'s door</b></button><button class="tile" data-act="go" data-v="dispatch"><span class="ic">' + ic("check") + '</span><b>Deliver orders</b></button><button class="tile" data-act="go" data-v="orders"><span class="ic">' + ic("search") + '</span><b>Track orders</b></button><button class="tile" data-act="go" data-v="rptStaffWork"><span class="ic">' + ic("cal") + '</span><b>My activity</b><small>Today or chosen dates</small></button><button class="tile" data-act="go" data-v="myTrips"><span class="ic">' + ic("bike") + '</span><b>My trips</b><small' + (open.length ? ' style="color:var(--danger);font-weight:700">' + open.length + ' open' : '>No open trip') + '</small></button><button class="tile" data-act="go" data-v="complaints"><span class="ic">' + ic("chat") + '</span><b>Complaints</b></button></div>' };
 };
 VIEWS.sendRider = () => {
   const R = S.ui.sr; const st = store(); if (!R) return { title: "Send with rider", body: "" }; const os = R.ids.map(id => find("orders", id)).filter(Boolean); const rs = riders(st);
@@ -1327,7 +1372,7 @@ VIEWS.rptRiders = () => {
     return {w, trips: my.length, stops: stp.length, done: stp.filter(x => x.st === "Done").length, fail: stp.filter(x => x.st === "Failed").length, pick: stp.filter(x => x.k === "p" && x.st === "Done").length, del: stp.filter(x => x.k === "o" && x.st === "Done").length, cash: r2(stp.filter(x => x.mode === "cash").reduce((a, x) => a + (+x.paid || 0), 0)), short: r2(hs.reduce((a, h) => a + Math.max(0, +h.short || 0), 0)), held: riderCash(st, w), earn: r2(L.filter(x => x.w === w && x.amt > 0).reduce((a, x) => a + x.amt, 0)), km: r2(my.reduce((a, t) => a + (+t.km || 0), 0))}; });
   const reasons = {}; ts.flatMap(t => t.stops).filter(x => x.st === "Failed").forEach(x => reasons[x.reason || "Other"] = (reasons[x.reason || "Other"] || 0) + 1);
   const T = k => r2(rows.reduce((a, r) => a + r[k], 0));
-  return { title: "Rider report", homeBtn: true, storePick: true,
+  return { title: "Rider work", homeBtn: true, storePick: true,
     body: periodHead() + '<div class="stats"><div class="stat"><b>' + T("trips") + '</b><span>Trips · ' + T("stops") + ' stops</span></div><div class="stat"><b>' + (T("stops") ? r2(T("stops") / Math.max(1, T("trips"))) : 0) + '</b><span>Stops per trip</span></div><div class="stat"><b' + (T("fail") ? ' style="color:var(--danger)"' : "") + '>' + T("fail") + '</b><span>Not done</span></div></div>' +
       '<div class="card pad"><div class="scroll-x"><table class="t mis rtable"><thead><tr><th>Rider</th><th class="r">Trips</th><th class="r">Pickups</th><th class="r">Deliveries</th><th class="r">Not done</th><th class="r">Km</th><th class="r">Cash collected</th><th class="r">Short</th><th class="r">With rider now</th><th class="r">Earned</th></tr></thead>' +
       rows.map(r => '<tr class="clk" data-act="go" data-v="worker:' + esc(r.w) + '"><td>' + esc(workerName(r.w)) + '</td><td class="r">' + r.trips + '</td><td class="r">' + r.pick + '</td><td class="r">' + r.del + '</td><td class="r"' + (r.fail ? ' style="color:var(--danger)"' : "") + '>' + r.fail + '</td><td class="r">' + (r.km || "–") + '</td><td class="r">' + money(r.cash) + '</td><td class="r"' + (r.short ? ' style="color:var(--danger);font-weight:700"' : "") + '>' + money(r.short) + '</td><td class="r">' + money(r.held) + '</td><td class="r">' + money(r.earn) + '</td></tr>').join("") +
@@ -3088,7 +3133,7 @@ VIEWS.att = () => {
 VIEWS.attMonth = () => {
   const st = store(); const [from, to, lab] = payPeriod(st, S.ui.payOff || 0); const ws = attStaff(st); const rows = ws.map(w => ({w, A: attSummary(st, w, from, to)}));
   const ds = []; for (let d = from; d <= to; d = addDays(d, 1)) ds.push(d);
-  return { title: "Attendance sheet", homeBtn: true, storePick: true,
+  return { title: "Attendance", homeBtn: true, storePick: true,
     body: periodNav(lab) + '<div class="card pad"><div class="scroll-x"><table class="t mis"><thead><tr><th>Staff</th><th class="r">P</th><th class="r">½ / M</th><th class="r">A / L</th><th class="r">WO / HO</th><th class="r">Not marked</th><th class="r">Paid days</th></tr></thead>' +
       rows.map(({w, A}) => '<tr><td>' + esc(w.name) + '</td><td class="r">' + A.P + '</td><td class="r">' + (A.H + A.M) + '</td><td class="r">' + (A.A + A.L) + '</td><td class="r">' + (A.WO + A.HO) + '</td><td class="r"' + (A.U ? ' style="color:var(--warn);font-weight:700"' : "") + '>' + A.U + '</td><td class="r"><b>' + (fixedKey(w) === "Daily wage" ? A.P + (A.H + A.M) / 2 : w.attReq !== false && fixedKey(w) === "Monthly salary" ? paidDaysMonthly(st, w, A, from).paid : A.P + (A.H + A.M) / 2 + A.WO + A.HO) + '</b></td></tr>').join("") + '</table></div><p class="hint">Paid days = Present + half of Half days + paid week offs (as per the week-off slab in Store settings) + Holidays. Not-marked days are not paid. M = check-out missing (counted as half day until corrected). Period: ' + daysIn(from, to) + ' days.</p></div>' +
       '<p class="sec-title">Day-wise</p><div class="card pad"><div class="scroll-x"><table class="t mis attgrid"><thead><tr><th>Staff</th>' + ds.map(d => '<th class="c">' + (+d.slice(8)) + '<div class="hint">' + DAYS[new Date(d + "T00:00:00").getDay()].slice(0, 2) + '</div></th>').join("") + '</tr></thead>' +
@@ -3266,7 +3311,7 @@ function paySheetRows(st, from, to){ const ids = new Set(ironWorkers(st).map(w =
 const SHEET_COLS = [["Total days", D => D.days], ["Work days", D => D.work], ["Absent", D => D.abs], ["Week off", D => D.wo], ["Paid days", D => D.paid], ["Monthly / daily rate", D => D.rate ? money(D.rate) : "–", 1], ["Earned salary", D => money(D.earned), 1, "earned"], ["Other earning", D => money(D.oeT), 1, "oeT"], ["Advances", D => money(D.advT), 1, "advT"], ["Other deductions", D => money(D.odT), 1, "odT"], ["Net salary", D => money(D.net), 1, "net"]];
 VIEWS.salReg = () => {
   const st = store(); const [from, to, lab] = payPeriod(st, S.ui.payOff || 0); const rows = paySheetRows(st, from, to); const tot = k => r2(rows.reduce((a, r) => a + (+r.D[k] || 0), 0));
-  return { title: "Pay sheet", homeBtn: true, storePick: true,
+  return { title: "Salary", homeBtn: true, storePick: true,
     right: '<button class="btn small ghost" data-act="sheetPrint">' + ic("download") + 'Print</button>',
     body: periodNav(lab) + '<div class="card pad"><div class="scroll-x"><table class="t mis paysheet"><thead><tr><th>#</th><th>Staff</th>' + SHEET_COLS.map(c => '<th class="r">' + c[0] + '</th>').join("") + '<th>Status</th></tr></thead>' +
       rows.map((r, i) => '<tr class="clk" data-act="psOpen" data-id="' + esc(r.w.id) + '"><td>' + (i + 1) + '</td><td style="white-space:nowrap"><b>' + esc(r.w.name) + '</b><div class="hint">' + esc(r.w.staffId || "") + ' · ' + esc(payType(r.w)) + '</div></td>' + SHEET_COLS.map(c => '<td class="r"' + (c[0] === "Net salary" ? ' style="font-weight:700"' : "") + '>' + c[1](r.D) + '</td>').join("") + '<td>' + (r.p ? '<span class="pill ok">Paid</span><div class="hint">' + esc(MODE_NAMES[r.p.mode] || r.p.mode) + '</div>' : '<span class="pill warn">Due</span>') + '</td></tr>').join("") +
@@ -3285,7 +3330,7 @@ VIEWS.rptLabour = () => {
     const sal = S.d.wpays.filter(p => p.kind === "salary" && p.storeId === st.id && p.from === from); const fixed = r2(sal.reduce((a, p) => a + (+p.fixed || 0) + (+p.add || 0) + (+(p.extra || {}).amt || 0), 0));
     const piece = r2(S.d.wpays.filter(p => p.kind !== "salary" && p.storeId === st.id && p.date >= from && p.date <= to).reduce((a, p) => a + +p.amount, 0) + sal.reduce((a, p) => a + Math.max(0, +p.piece || 0), 0));
     const total = r2(fixed + piece); return {lab, sales, fixed, piece, total, pct: sales ? (total / sales * 100).toFixed(1) + "%" : "–"}; });
-  return { title: "Labour cost", homeBtn: true, storePick: true,
+  return { title: "Staff cost", homeBtn: true, storePick: true,
     body: '<p class="hint">' + esc(st.name) + ' · based on salary and piece payments recorded in the app (cash basis). Advances are loans, not cost, and are excluded.</p><div class="card pad"><div class="scroll-x"><table class="t mis"><thead><tr><th>Period</th><th class="r">Sales booked</th><th class="r">Salary + additions</th><th class="r">Piece / trip paid</th><th class="r">Total labour</th><th class="r">% of sales</th></tr></thead>' +
       rows.map(r => '<tr><td>' + esc(r.lab) + '</td><td class="r">' + money(r.sales) + '</td><td class="r">' + money(r.fixed) + '</td><td class="r">' + money(r.piece) + '</td><td class="r"><b>' + money(r.total) + '</b></td><td class="r">' + r.pct + '</td></tr>').join("") + '</table></div></div>' };
 };
@@ -3840,6 +3885,9 @@ const ACT = {
   swapTo: el => { const s = find("stores", el.dataset.id); if (!s || !allowedStores().some(x => x.id === s.id)) return; S.storeId = s.id; lsSet("ll_store", s.id); S.ui.procStage = null; S.ui.orderQ = ""; S.draft = null; S.stack = []; S.view = "home"; window.scrollTo(0, 0); toast("Switched to " + s.name + ". Store settings applied."); render(); },
   nav: el => { S.stack = []; S.form = null; S.view = el.dataset.v; S.params = {}; window.scrollTo(0, 0); render(); },
   period: el => { S.ui.period = el.dataset.p; render(); },
+  swPeriod: el => { S.ui.swPeriod = el.dataset.p; if (el.dataset.p === "custom") { S.ui.swFrom ||= todayStr(); S.ui.swTo ||= todayStr(); } render(); },
+  swShow: el => { S.ui.swShow = el.dataset.v; render(); },
+  swCsv: () => swExport(),
   misStore: el => { if (!allowedStores().some(x => x.id === el.dataset.id)) return; S.storeId = el.dataset.id; lsSet("ll_store", S.storeId); S.stack = []; S.view = "mis"; window.scrollTo(0, 0); render(); },
   cmpF: el => { S.ui.cmpF = el.dataset.v; render(); },
   cmpPickBill: el => { S.ui.cmpBillQ = ""; S.form = null; S.view = "cmpNew:" + el.dataset.id; render(); },
@@ -4009,7 +4057,7 @@ function roleCollections(){
   if (S.isOwner) return COLS.slice();
   if (["Admin","Store manager"].includes(roleOf())) return COLS.filter(c => c !== "employees");
   const common = ["stores","customers","services","groups","products","routes","pricelists","colors","orders","pickups","complaints","trips","workTypes"];
-  if (roleOf() === "Store staff") return [...common, "closings", "rcash"];
+  if (roleOf() === "Store staff") return [...common, "closings", "rcash", "workers", "attendance"];
   if (roleOf() === "Processing") return ["stores","services","groups","products","pricelists","colors","orders","workTypes","pieceRates","workers","attendance","wpays","advances"];
   if (roleOf() === "Rider") return [...common, "rcash", "pieceRates","workers","attendance","wpays","advances"];
   return common;
