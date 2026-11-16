@@ -1,5 +1,49 @@
-const C='ll-v2';
-self.addEventListener('install',e=>{self.skipWaiting();e.waitUntil(caches.open(C).then(c=>c.addAll(['./','index.html','manifest.json','icon-192.png'])).catch(()=>{}));});
-self.addEventListener('activate',e=>e.waitUntil(self.clients.claim()));
-self.addEventListener('fetch',e=>{const u=new URL(e.request.url);if(e.request.method!=='GET'||u.origin!==location.origin)return;
-e.respondWith(fetch(e.request).then(r=>{const cp=r.clone();caches.open(C).then(c=>c.put(e.request,cp));return r;}).catch(()=>caches.match(e.request).then(m=>m||caches.match('index.html'))));});
+const CACHE = 'll-v7-production';
+const SHELL = [
+  './',
+  'index.html',
+  'customer.html',
+  'manifest.json',
+  'icon-192.png',
+  'icon-512.png',
+  'sw.js',
+];
+
+self.addEventListener('install', (event) => {
+  self.skipWaiting();
+  event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(SHELL)));
+});
+
+self.addEventListener('activate', (event) => {
+  event.waitUntil(
+    caches.keys()
+      .then((keys) => Promise.all(keys.filter((key) => key !== CACHE).map((key) => caches.delete(key))))
+      .then(() => self.clients.claim())
+  );
+});
+
+self.addEventListener('fetch', (event) => {
+  const url = new URL(event.request.url);
+  if (event.request.method !== 'GET' || url.origin !== self.location.origin) return;
+
+  if (event.request.mode === 'navigate') {
+    event.respondWith(
+      fetch(event.request).catch(() =>
+        caches.match(url.pathname.endsWith('customer.html') ? 'customer.html' : 'index.html')
+      )
+    );
+    return;
+  }
+
+  event.respondWith(
+    fetch(event.request)
+      .then((response) => {
+        if (response.ok) {
+          const copy = response.clone();
+          caches.open(CACHE).then((cache) => cache.put(event.request, copy));
+        }
+        return response;
+      })
+      .catch(() => caches.match(event.request))
+  );
+});

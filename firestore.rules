@@ -1,0 +1,136 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() { return request.auth != null && request.auth.token.email != null; }
+    function email() { return signedIn() ? request.auth.token.email.lower() : ""; }
+    function owner() { return email() == "naveenm0383@gmail.com"; }
+    function verified() { return signedIn() && request.auth.token.email_verified == true; }
+    function accessExists() { return signedIn() && exists(/databases/$(database)/documents/staffAccess/$(email())); }
+    function access() { return get(/databases/$(database)/documents/staffAccess/$(email())).data; }
+    function activeStaff() { return owner() || (verified() && accessExists() && access().active == true); }
+    function role(r) { return owner() || (activeStaff() && access().role == r); }
+    function manager() { return owner() || role("Store manager"); }
+    function counter() { return role("Store staff"); }
+    function processing() { return role("Processing"); }
+    function rider() { return role("Rider"); }
+    function workerId() { return owner() ? "owner" : access().workerId; }
+    function allowedStore(id) {
+      return owner() || (activeStaff() && id is string && id in access().stores);
+    }
+    function canReadStoreDoc() { return activeStaff() && allowedStore(resource.data.storeId); }
+    function canCreateStoreDoc() { return activeStaff() && allowedStore(request.resource.data.storeId); }
+    function canUpdateStoreDoc() {
+      return activeStaff() && allowedStore(resource.data.storeId) &&
+        request.resource.data.storeId == resource.data.storeId;
+    }
+
+    match /staffAccess/{staffEmail} {
+      allow read: if owner() || (verified() && staffEmail == email());
+      allow create, update, delete: if owner();
+    }
+
+    match /config/{document} {
+      allow read: if activeStaff();
+      allow write: if owner();
+    }
+
+    match /pub/{document} {
+      allow get: if true;
+      allow list: if false;
+      allow write: if manager();
+    }
+
+    match /track/{document} {
+      allow get: if true;
+      allow list: if false;
+      allow write: if activeStaff();
+    }
+    match /trackm/{document} {
+      allow get: if true;
+      allow list: if false;
+      allow write: if activeStaff();
+    }
+
+    match /webreq/{document} {
+      allow create: if !signedIn()
+        && request.resource.data.keys().hasOnly(['storeId','name','mobile','flat','apartment','area','date','slot','svcs','instr','at','status'])
+        && request.resource.data.status == 'New'
+        && request.resource.data.mobile is string && request.resource.data.mobile.matches('^[0-9]{10}$')
+        && request.resource.data.name is string && request.resource.data.name.size() >= 1 && request.resource.data.name.size() <= 60
+        && request.resource.data.flat is string && request.resource.data.flat.size() <= 60
+        && request.resource.data.apartment is string && request.resource.data.apartment.size() <= 80
+        && request.resource.data.area is string && request.resource.data.area.size() <= 80
+        && request.resource.data.svcs is string && request.resource.data.svcs.size() <= 200
+        && request.resource.data.instr is string && request.resource.data.instr.size() <= 300;
+      allow read, update, delete: if manager() && allowedStore(resource.data.storeId);
+    }
+
+    match /workers/{id} {
+      allow read: if owner() || (role("Store manager") && resource.data.stores.hasAny(access().stores)) ||
+        (activeStaff() && id == workerId());
+      allow write: if owner();
+    }
+    match /employees/{id} { allow read, write: if owner(); }
+
+    match /attendance/{id} {
+      allow read: if (manager() && allowedStore(resource.data.storeId)) || (activeStaff() && resource.data.w == workerId());
+      allow create: if (manager() && allowedStore(request.resource.data.storeId)) || (activeStaff() && request.resource.data.w == workerId() && allowedStore(request.resource.data.storeId));
+      allow update: if (manager() && allowedStore(resource.data.storeId) && request.resource.data.storeId == resource.data.storeId) || (activeStaff() && resource.data.w == workerId() && request.resource.data.w == resource.data.w && request.resource.data.storeId == resource.data.storeId);
+      allow delete: if manager() && allowedStore(resource.data.storeId);
+    }
+    match /wpays/{id} {
+      allow read: if (manager() && allowedStore(resource.data.storeId)) || (activeStaff() && resource.data.w == workerId());
+      allow create: if manager() && allowedStore(request.resource.data.storeId);
+      allow update: if manager() && allowedStore(resource.data.storeId) && request.resource.data.storeId == resource.data.storeId;
+      allow delete: if manager() && allowedStore(resource.data.storeId);
+    }
+    match /advances/{id} {
+      allow read: if (manager() && allowedStore(resource.data.storeId)) || (activeStaff() && resource.data.w == workerId());
+      allow create: if manager() && allowedStore(request.resource.data.storeId);
+      allow update: if manager() && allowedStore(resource.data.storeId) && request.resource.data.storeId == resource.data.storeId;
+      allow delete: if manager() && allowedStore(resource.data.storeId);
+    }
+
+    match /customers/{id} {
+      allow read: if activeStaff() && allowedStore(resource.data.homeStore);
+      allow create: if (manager() || counter() || rider()) && allowedStore(request.resource.data.homeStore);
+      allow update: if (manager() || counter() || rider()) && allowedStore(resource.data.homeStore) && request.resource.data.homeStore == resource.data.homeStore;
+      allow delete: if manager() && allowedStore(resource.data.homeStore);
+    }
+
+    match /{collection}/{id} {
+      allow read: if collection in ['stores','services','groups','products','routes','pricelists','colors','workTypes','pieceRates'] && activeStaff();
+      allow write: if collection in ['stores','services','groups','products','routes','pricelists','colors','workTypes','pieceRates'] && manager();
+    }
+
+    match /vendors/{id} { allow read, write: if manager(); }
+
+    match /{collection}/{id} {
+      allow read: if collection in ['orders','pickups','complaints','trips','closings','rcash'] && canReadStoreDoc();
+      allow create: if collection in ['orders','pickups','complaints','trips','closings','rcash'] && canCreateStoreDoc() &&
+        (manager() || counter() || (processing() && collection == 'orders') || (rider() && collection in ['orders','pickups','complaints','trips','rcash']));
+      allow update: if collection in ['orders','pickups','complaints','trips','closings','rcash'] && canUpdateStoreDoc() &&
+        (manager() || counter() || (processing() && collection == 'orders') || (rider() && collection in ['orders','pickups','complaints','trips','rcash']));
+      allow delete: if collection in ['orders','pickups','complaints','trips','closings','rcash'] && manager() && canReadStoreDoc();
+    }
+
+    match /counters/{id} {
+      allow read: if activeStaff();
+      allow create: if activeStaff() && allowedStore(request.resource.data.storeId)
+        && request.resource.data.keys().hasOnly(['last','start','storeId','kind'])
+        && request.resource.data.storeId is string && request.resource.data.kind is string
+        && id == request.resource.data.storeId + '_' + request.resource.data.kind
+        && request.resource.data.last is int && request.resource.data.start is int
+        && request.resource.data.last == request.resource.data.start;
+      allow update: if activeStaff() && allowedStore(resource.data.storeId)
+        && request.resource.data.keys().hasOnly(['last','start','storeId','kind'])
+        && request.resource.data.storeId == resource.data.storeId && request.resource.data.kind == resource.data.kind
+        && id == request.resource.data.storeId + '_' + request.resource.data.kind
+        && request.resource.data.last is int && request.resource.data.start is int
+        && request.resource.data.last >= request.resource.data.start
+        && (request.resource.data.last == resource.data.last + 1 || request.resource.data.last == request.resource.data.start);
+      allow delete: if owner();
+    }
+    match /{document=**} { allow read, write: if false; }
+  }
+}
