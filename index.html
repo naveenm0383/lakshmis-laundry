@@ -346,7 +346,7 @@ const I = {
 const ic = n => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + (I[n] || "") + '</svg>';
 
 /* ---------- state & data ---------- */
-const APP_VER = 80;
+const APP_VER = 81;
 const COLS = ["stores","employees","customers","services","groups","products","routes","pricelists","colors","vendors","orders","closings","workers","pieceRates","wpays","workTypes","pickups","complaints","trips","rcash","attendance","advances","webreq","expenses"];
 const S = { db: null, mode: "connecting", d: Object.fromEntries(COLS.map(c => [c, []])), biz: undefined, counters: {},
   stack: [], view: "home", params: {}, form: null, draft: null, storeId: lsGet("ll_store"), empId: lsGet("ll_emp") || null, isOwner: false, userReady: false, skipSetup: false, ui: {}, armed: null,
@@ -593,7 +593,28 @@ function authGateHtml(){ const u = S.authUser;
       '<div class="hint" style="display:flex;align-items:center;gap:10px"><span style="height:1px;background:var(--line);flex:1"></span>or<span style="height:1px;background:var(--line);flex:1"></span></div><button class="btn ghost" type="button" data-act="googleLogin">Continue with Google</button>') +
     '<p class="hint" style="text-align:center;margin:0">Never share passwords. Admins control staff roles and store access.</p></div></div></div>'; }
 
-function initEmailLogin(){ const f = document.getElementById("emailLogin"); if (!f) return; f.onsubmit = async e => { e.preventDefault(); const email = document.getElementById("loginEmail").value.trim().toLowerCase(), password = document.getElementById("loginPassword").value; const b = f.querySelector('button[type="submit"]'); b.disabled = true; b.textContent = "Signing in…"; S.fireErr = ""; try { await firebase.auth().signInWithEmailAndPassword(email, password); } catch(err) { S.fireErr = authMessage(err); render(); } }; }
+function initEmailLogin(){ const f = document.getElementById("emailLogin"); if (!f) return; f.onsubmit = async e => { e.preventDefault(); const email = document.getElementById("loginEmail").value.trim().toLowerCase(), password = document.getElementById("loginPassword").value; const b = f.querySelector('button[type="submit"]'); b.disabled = true; b.textContent = "Signing in…"; S.fireErr = ""; lsSet("ll_session_last", String(Date.now())); try { await firebase.auth().signInWithEmailAndPassword(email, password); } catch(err) { S.fireErr = authMessage(err); render(); } }; }
+
+const SESSION_IDLE_MS = 30 * 60 * 1000;
+let sessionTimer = null, sessionLastWrite = 0, sessionLocking = false;
+function sessionLast(){ return +(lsGet("ll_session_last") || 0); }
+async function lockExpiredSession(){
+  if(sessionLocking || !S.fire || !S.authUser) return; sessionLocking = true; S.fireErr = "For your security, the app locked after 30 minutes without activity. Sign in again.";
+  try { await firebase.auth().signOut(); } catch(e) { console.error(e); } finally { sessionLocking = false; }
+}
+function touchSession(){
+  if(!S.fire || !S.authUser || sessionLocking) return; const now=Date.now(), last=sessionLast();
+  if(last && now-last>=SESSION_IDLE_MS){ lockExpiredSession(); return; }
+  if(now-sessionLastWrite<10000) return; sessionLastWrite=now; lsSet("ll_session_last",String(now));
+}
+function checkSession(){ if(S.fire && S.authUser && sessionLast() && Date.now()-sessionLast()>=SESSION_IDLE_MS) lockExpiredSession(); }
+function startSessionLock(){
+  if(sessionTimer) clearInterval(sessionTimer); const last=sessionLast();
+  if(last && Date.now()-last>=SESSION_IDLE_MS){ lockExpiredSession(); return false; }
+  touchSession(); sessionTimer=setInterval(checkSession,15000); return true;
+}
+["pointerdown","keydown","input","touchstart"].forEach(ev=>document.addEventListener(ev,touchSession,{passive:true,capture:true}));
+document.addEventListener("visibilitychange",()=>{if(!document.hidden)checkSession();});
 
 function render(){
   if (S.fire && (!S.authUser || S.accessDenied)) { app.innerHTML = authGateHtml(); if (!S.accessDenied) setTimeout(initEmailLogin, 0); return; }
@@ -3476,8 +3497,8 @@ async function addStarter(){
 
 const ACT = {
   back, home,
-  googleLogin: async el => { el.disabled = true; S.fireErr = ""; try { const p = new firebase.auth.GoogleAuthProvider(); p.setCustomParameters({prompt:"select_account"}); await firebase.auth().signInWithPopup(p); } catch(e) { console.error(e); S.fireErr = authMessage(e); render(); } },
-  logout: async () => { await firebase.auth().signOut(); location.reload(); },
+  googleLogin: async el => { el.disabled = true; S.fireErr = ""; lsSet("ll_session_last",String(Date.now())); try { const p = new firebase.auth.GoogleAuthProvider(); p.setCustomParameters({prompt:"select_account"}); await firebase.auth().signInWithPopup(p); } catch(e) { console.error(e); S.fireErr = authMessage(e); render(); } },
+  logout: async () => { lsSet("ll_session_last",""); await firebase.auth().signOut(); location.reload(); },
   passwordReset: async () => { const input = document.getElementById("loginEmail"); const email = String((input && input.value) || "").trim().toLowerCase(); if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { if (input) input.focus(); return toast("Enter your email address first."); } try { await firebase.auth().sendPasswordResetEmail(email); toast("Password setup email sent. Check inbox and spam."); } catch(e) { console.error(e); toast(authMessage(e)); } },
   staffPasswordEmail: async el => { if (!isAdmin()) return; const email = String(el.dataset.email || "").trim().toLowerCase(); if (!email) return; el.disabled = true; try { await firebase.auth().sendPasswordResetEmail(email); toast("Password setup email sent to " + email); } catch(e) { console.error(e); toast(authMessage(e)); } finally { el.disabled = false; } },
   go: el => { S.form = null; if (el.dataset.v === "import") S.imp = null; if (el.dataset.v === "process") { S.ui.ptab = "bills"; S.ui.pf = el.dataset.stage === "Ready" ? "ready" : el.dataset.stage === "cnt" ? "cnt" : ""; S.ui.procSel = new Set(); S.ui.pq = ""; } go(el.dataset.v); },
@@ -4187,12 +4208,13 @@ async function bootFire(){
   const auth = firebase.auth();
   auth.onAuthStateChanged(async u => {
     S.authUser = u || null; S.access = null; S.accessDenied = false; S.userReady = false;
-    if (!u) { render(); return; }
+    if (!u) { if(sessionTimer){clearInterval(sessionTimer);sessionTimer=null;} render(); return; }
     const email = String(u.email || "").trim().toLowerCase();
     if (email === OWNER_EMAIL) S.access = {email, name:u.displayName || "Naveen Malapati", role:"Admin", stores:[], active:true};
     else { try { const d = await fs.collection("staffAccess").doc(email).get(); if (d.exists && d.data().active === true) S.access = d.data(); else S.accessDenied = true; } catch(e) { console.error(e); S.accessDenied = true; } }
     if (S.accessDenied) { render(); return; }
     S.isOwner = email === OWNER_EMAIL; S.empId = S.access.workerId || "owner"; S.userReady = true;
+    if (!startSessionLock()) return;
     startListeners(fs); render();
   });
 }
