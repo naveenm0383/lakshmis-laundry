@@ -346,7 +346,7 @@ const I = {
 const ic = n => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + (I[n] || "") + '</svg>';
 
 /* ---------- state & data ---------- */
-const APP_VER = 81;
+const APP_VER = 82;
 const COLS = ["stores","employees","customers","services","groups","products","routes","pricelists","colors","vendors","orders","closings","workers","pieceRates","wpays","workTypes","pickups","complaints","trips","rcash","attendance","advances","webreq","expenses"];
 const S = { db: null, mode: "connecting", d: Object.fromEntries(COLS.map(c => [c, []])), biz: undefined, counters: {},
   stack: [], view: "home", params: {}, form: null, draft: null, storeId: lsGet("ll_store"), empId: lsGet("ll_emp") || null, isOwner: false, userReady: false, skipSetup: false, ui: {}, armed: null,
@@ -587,7 +587,7 @@ function authMessage(e){
 }
 function authGateHtml(){ const u = S.authUser;
   return '<div class="loading" style="padding:24px"><div style="width:min(440px,100%);text-align:left"><div class="card pad stack" style="gap:16px">' +
-    '<div class="hello"><div class="logo">' + ic("shirt") + '</div><div><h2 style="margin:0;color:var(--navy)">Lakshmi\'s Laundry</h2><p class="hint" style="margin:4px 0 0">Owner and staff sign-in</p></div></div>' +
+    '<div class="hello"><div class="logo"><img src="icon-192.png" alt="Lakshmi\'s Laundry logo" style="width:100%;height:100%;object-fit:contain"></div><div><h2 style="margin:0;color:var(--navy)">Lakshmi\'s Laundry</h2><p class="hint" style="margin:4px 0 0">Owner and staff sign-in</p></div></div>' +
     (u && S.accessDenied ? '<div class="notice">' + ic("warn") + '<div><b>' + esc(S.fireErr || ("Access is not approved for " + (u.email || "this account") + ".")) + '</b><br>An Admin must add this email in Setup → Staff and switch on staff app access.</div></div><button class="btn ghost" data-act="logout">Use another account</button>' : (S.fireErr ? '<div class="notice">' + ic("warn") + '<div>' + esc(S.fireErr) + '</div></div>' : "") +
       '<form id="emailLogin" class="stack" style="gap:10px"><label class="f"><span>Email address</span><input class="in" id="loginEmail" type="email" autocomplete="username" required></label><label class="f"><span>Password</span><input class="in" id="loginPassword" type="password" autocomplete="current-password" minlength="10" required></label><button class="btn" type="submit">Sign in with email</button><button class="link" type="button" data-act="passwordReset">Forgot or set password?</button></form>' +
       '<div class="hint" style="display:flex;align-items:center;gap:10px"><span style="height:1px;background:var(--line);flex:1"></span>or<span style="height:1px;background:var(--line);flex:1"></span></div><button class="btn ghost" type="button" data-act="googleLogin">Continue with Google</button>') +
@@ -3657,7 +3657,6 @@ const ACT = {
     if (f.gstin && !/^[0-9]{2}[A-Z0-9]{13}$/i.test(String(f.gstin).trim())) { S.ui.storeTab = "general"; render(); return toast("GSTIN should be 15 characters."); }
     if (f.mobile && !/^\d{10}$/.test(String(f.mobile))) { S.ui.storeTab = "general"; render(); return toast("Store mobile number should be 10 digits."); }
     if (f.pickup !== false && !Object.values(f.pickupSlots || {}).some(x => Array.isArray(x) && x.length)) { S.ui.storeTab = "pickupSlots"; render(); return toast("Add at least one pickup time, or switch pickup off under General."); }
-    if (f.pickup !== false && !/^\d{10}$/.test(String(f.mobile || ""))) { S.ui.storeTab = "general"; render(); return toast("Add the store mobile number before enabling customer pickup."); }
     if ((f.payModes || {}).upi !== false && !String(f.upiId || "").trim()) { S.ui.storeTab = "payment"; render(); return toast("Add the store UPI ID, or switch UPI off."); }
     if ((f.discLimitAmt === "" || f.discLimitAmt == null) && (f.discLimitPct === "" || f.discLimitPct == null)) { S.ui.storeTab = "payment"; render(); return toast("Set a Store Manager discount limit. Enter 0 to require Admin approval."); }
     const rec = clone(f); delete rec._kind; delete rec.storeForm; rec.gstin = String(rec.gstin || "").trim().toUpperCase(); rec.code = String(rec.code).trim().toUpperCase();
