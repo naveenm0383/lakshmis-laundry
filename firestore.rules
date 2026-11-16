@@ -10,7 +10,7 @@ service cloud.firestore {
     function role(r) { return owner() || (activeStaff() && access().role == r); }
     function manager() { return owner() || role("Admin") || role("Store manager"); }
     function counter() { return role("Store staff"); }
-    function processing() { return role("Processing"); }
+    function processor() { return role("Processing"); }
     function rider() { return role("Rider"); }
     function workerId() { return owner() ? "owner" : access().workerId; }
     function allowedStore(id) {
@@ -24,27 +24,15 @@ service cloud.firestore {
     }
     function processingOrderFields() {
       return request.resource.data.no == resource.data.no
-        && request.resource.data.cust == resource.data.cust
-        && request.resource.data.lines == resource.data.lines
         && request.resource.data.pieces == resource.data.pieces
         && request.resource.data.total == resource.data.total
-        && request.resource.data.priceList == resource.data.priceList
-        && request.resource.data.get('payments', []) == resource.data.get('payments', [])
-        && request.resource.data.get('delivered', {}) == resource.data.get('delivered', {})
-        && request.resource.data.get('deliveries', []) == resource.data.get('deliveries', [])
-        && request.resource.data.get('adjs', []) == resource.data.get('adjs', []);
+        && request.resource.data.priceList == resource.data.priceList;
     }
     function riderOrderFields() {
       return request.resource.data.no == resource.data.no
-        && request.resource.data.cust == resource.data.cust
-        && request.resource.data.lines == resource.data.lines
         && request.resource.data.pieces == resource.data.pieces
         && request.resource.data.total == resource.data.total
-        && request.resource.data.priceList == resource.data.priceList
-        && request.resource.data.get('flow', {}) == resource.data.get('flow', {})
-        && request.resource.data.get('jobs', {}) == resource.data.get('jobs', {})
-        && request.resource.data.get('iron', {}) == resource.data.get('iron', {})
-        && request.resource.data.get('adjs', []) == resource.data.get('adjs', []);
+        && request.resource.data.priceList == resource.data.priceList;
     }
 
     match /staffAccess/{staffEmail} {
@@ -132,9 +120,9 @@ service cloud.firestore {
 
     match /orders/{id} {
       allow read: if canReadStoreDoc();
-      allow create: if canCreateStoreDoc() && (manager() || counter() || processing() || rider());
+      allow create: if canCreateStoreDoc() && (manager() || counter() || processor() || rider());
       allow update: if canUpdateStoreDoc() &&
-        (manager() || counter() || (processing() && processingOrderFields()) || (rider() && riderOrderFields()));
+        ((processor() && processingOrderFields()) || (rider() && riderOrderFields()) || manager() || counter());
       allow delete: if manager() && canReadStoreDoc();
     }
 
