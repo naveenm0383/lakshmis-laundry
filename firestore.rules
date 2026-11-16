@@ -23,13 +23,16 @@ service cloud.firestore {
         request.resource.data.storeId == resource.data.storeId;
     }
     function processingOrderFields() {
-      return request.resource.data.diff(resource.data).affectedKeys()
-        .hasOnly(['flow','status','history','jobs','iron']);
+      return !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+        'storeId','no','cust','lines','pieces','sub','express','pickup','gst','roundOff','total',
+        'priceList','payments','delivered','deliveries','adjs','createdAt','createdBy','by','date'
+      ]);
     }
     function riderOrderFields() {
-      return request.resource.data.diff(resource.data).affectedKeys()
-        .hasOnly(['status','trip','history','payments','delivered','deliveries','deliveredOn',
-          'pickedUp','pickedAt','pickedBy','received','receivedAt','receivedBy','homeDel']);
+      return !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+        'storeId','no','cust','lines','pieces','sub','express','pickup','gst','roundOff','total',
+        'priceList','flow','jobs','iron','adjs','createdAt','createdBy','by','date'
+      ]);
     }
 
     match /staffAccess/{staffEmail} {
