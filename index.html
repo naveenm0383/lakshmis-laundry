@@ -346,7 +346,7 @@ const I = {
 const ic = n => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + (I[n] || "") + '</svg>';
 
 /* ---------- state & data ---------- */
-const APP_VER = 75;
+const APP_VER = 76;
 const COLS = ["stores","employees","customers","services","groups","products","routes","pricelists","colors","vendors","orders","closings","workers","pieceRates","wpays","workTypes","pickups","complaints","trips","rcash","attendance","advances","webreq"];
 const S = { db: null, mode: "connecting", d: Object.fromEntries(COLS.map(c => [c, []])), biz: undefined, counters: {},
   stack: [], view: "home", params: {}, form: null, draft: null, storeId: lsGet("ll_store"), empId: lsGet("ll_emp") || null, isOwner: false, userReady: false, skipSetup: false, ui: {}, armed: null,
@@ -4004,7 +4004,7 @@ document.addEventListener("change", e => {
 /* ---------- boot ---------- */
 S.loaded = new Set();
 async function syncAccess(){ /* Login/access records are intentionally disabled. */ }
-const STORE_COLS = new Set(["orders","pickups","complaints","trips","closings","rcash","webreq"]);
+const STORE_COLS = new Set(["orders","pickups","complaints","trips","closings","rcash","webreq","attendance","wpays","advances"]);
 function roleCollections(){
   if (S.isOwner) return COLS.slice();
   if (["Admin","Store manager"].includes(roleOf())) return COLS.filter(c => c !== "employees");
