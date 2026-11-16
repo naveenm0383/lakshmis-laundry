@@ -346,8 +346,8 @@ const I = {
 const ic = n => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + (I[n] || "") + '</svg>';
 
 /* ---------- state & data ---------- */
-const APP_VER = 79;
-const COLS = ["stores","employees","customers","services","groups","products","routes","pricelists","colors","vendors","orders","closings","workers","pieceRates","wpays","workTypes","pickups","complaints","trips","rcash","attendance","advances","webreq"];
+const APP_VER = 80;
+const COLS = ["stores","employees","customers","services","groups","products","routes","pricelists","colors","vendors","orders","closings","workers","pieceRates","wpays","workTypes","pickups","complaints","trips","rcash","attendance","advances","webreq","expenses"];
 const S = { db: null, mode: "connecting", d: Object.fromEntries(COLS.map(c => [c, []])), biz: undefined, counters: {},
   stack: [], view: "home", params: {}, form: null, draft: null, storeId: lsGet("ll_store"), empId: lsGet("ll_emp") || null, isOwner: false, userReady: false, skipSetup: false, ui: {}, armed: null,
   authUser: null, access: null, accessDenied: false };
@@ -741,7 +741,7 @@ VIEWS.home = () => {
       '</div>' +
       '<p class="sec-title">Other transactions</p><div class="tiles">' +
         tile("go", ' data-v="orders"', "search", "Track orders") + tile("go", ' data-v="complaints"', "chat", "Complaints" + (cmpOpen(st).length ? ' <span class="pill bad">' + cmpOpen(st).length + '</span>' : "")) + tile("go", ' data-v="rptPickups"', "truck", "Pickups & count" + (pkReqs(st).length ? ' <span class="pill warn">' + pkReqs(st).length + '</span>' : "")) + tile("go", ' data-v="receipts"', "receipt", "Receipts") + tile("go", ' data-v="ironers"', "shirt", "Workers & piece count") + tile("go", ' data-v="rework"', "repeat", "Create re-work") + tile("go", ' data-v="closing"', "ledger", "Day closing") +
-        (canPayroll() && (S.fire || S.d.webreq.length) ? tile("go", ' data-v="webreq"', "chat", "Online requests" + (wrNew(st).length ? ' <span class="pill bad">' + wrNew(st).length + '</span>' : "")) : "") + tile("go", ' data-v="trips"', "bike", "Rider trips" + (openTrips(st).length ? ' <span class="pill blue">' + openTrips(st).length + '</span>' : "")) + (canPayroll() ? tile("go", ' data-v="att"', "cal", "Attendance") + tile("go", ' data-v="payroll"', "rupee", "Salary & advances") : "") +
+        (canPayroll() && (S.fire || S.d.webreq.length) ? tile("go", ' data-v="webreq"', "chat", "Online requests" + (wrNew(st).length ? ' <span class="pill bad">' + wrNew(st).length + '</span>' : "")) : "") + tile("go", ' data-v="trips"', "bike", "Rider trips" + (openTrips(st).length ? ' <span class="pill blue">' + openTrips(st).length + '</span>' : "")) + (canPayroll() ? tile("go", ' data-v="expenses"', "ledger", "Purchases & expenses") + tile("go", ' data-v="att"', "cal", "Attendance") + tile("go", ' data-v="payroll"', "rupee", "Salary & advances") : "") +
       '</div>' };
 };
 
@@ -778,7 +778,7 @@ VIEWS.masters = () => {
 const DELETE_SETS = [
   ["orders","Orders"], ["pickups","Pickups"], ["complaints","Complaints"], ["trips","Rider trips"],
   ["closings","Day closings"], ["rcash","Rider cash"], ["attendance","Attendance"],
-  ["wpays","Staff payments"], ["advances","Advances"], ["webreq","Online requests"]
+  ["wpays","Staff payments"], ["advances","Advances"], ["expenses","Purchases & expenses"], ["webreq","Online requests"]
 ];
 function deleteRowText(col, r){
   if (col === "orders") return [r.no, (r.cust || {}).name, fmtDate(r.date), r.status].filter(Boolean).join(" · ");
@@ -787,6 +787,7 @@ function deleteRowText(col, r){
   if (col === "trips") return [r.no, workerName(r.rider), fmtDate(String(r.startAt || "").slice(0,10)), r.status].filter(Boolean).join(" · ");
   if (col === "attendance") return [fmtDate(r.date), workerName(r.w), r.st || (r.in ? "Checked in" : "")].filter(Boolean).join(" · ");
   if (col === "wpays" || col === "advances") return [r.no, workerName(r.w), fmtDate(r.date), money(r.amount)].filter(Boolean).join(" · ");
+  if (col === "expenses") return [r.no, r.kind, r.party, r.category, fmtDate(r.date), money(r.total)].filter(Boolean).join(" · ");
   if (col === "webreq") return [r.name, r.mobile, fmtDate(r.date), r.status].filter(Boolean).join(" · ");
   return [r.no, fmtDate(r.date), r.by || r.doneBy || ""].filter(Boolean).join(" · ");
 }
@@ -807,6 +808,7 @@ function periodRange(k){ const t = todayStr(); if (k === "yday") { const y = add
 function bookTxns(st){
   const tx = [];
   S.d.orders.filter(o => o.storeId === st.id).forEach(o => (o.payments || []).forEach(p => (p.rider && p.mode === "cash") ? null : tx.push({date: p.date, at: p.at, acct: p.mode === "cash" ? "cash" : "bank", amt: +p.amount, kind: p.kind === "refund" ? "Refund" : p.kind === "due" ? "Due collected" : "Receipt", ref: p.no, mode: p.mode, o})));
+  S.d.expenses.filter(x => x.storeId === st.id && +x.paid > 0).forEach(x => tx.push({date:x.date, at:x.at, acct:x.mode === "cash" ? "cash" : "bank", amt:-x.paid, kind:x.kind + " – " + x.category + (x.party ? " – " + x.party : ""), ref:x.no, mode:x.mode}));
   S.d.wpays.filter(p => p.storeId === st.id && +p.amount).forEach(p => tx.push({date: p.date, at: p.at, acct: p.mode === "cash" ? "cash" : "bank", amt: -p.amount, kind: (p.kind === "salary" ? "Salary " + fmtDate(p.from) + " – " : "Ironing payment – ") + workerName(p.w), ref: p.no, mode: p.mode}));
   S.d.advances.filter(a => a.storeId === st.id).forEach(a => tx.push({date: a.date, at: a.at, acct: a.mode === "cash" ? "cash" : "bank", amt: -a.amount, kind: "Salary advance – " + workerName(a.w), ref: a.no, mode: a.mode}));
   S.d.complaints.filter(c => c.storeId === st.id && c.res && +c.res.paid > 0).forEach(c => tx.push({date: c.res.date, at: c.res.at, acct: c.res.payMode === "cash" ? "cash" : "bank", amt: -c.res.paid, kind: "Complaint compensation – " + c.cust.name, ref: c.no, mode: c.res.payMode}));
@@ -824,6 +826,46 @@ function bookSummary(st, from, to, tx){
     r[a] = {open: r2(ob[a] + before), in: r2(inn), out: r2(out), close: r2(ob[a] + before + inn - out)}; });
   return r;
 }
+
+const EXP_CATS = {
+  Purchase:["Detergents & chemicals","Packaging & covers","Hangers & tags","Laundry bags","Cleaning supplies","Machine parts","Equipment","Other purchase"],
+  Expense:["Rent","Electricity","Water","Fuel","Repairs & maintenance","Transport","Internet & phone","Marketing","Office supplies","Professional fees","Bank charges","Other expense"]
+};
+const EXP_MODES = [["cash","Cash"],["upi","UPI"],["bank","Bank transfer"],["card","Card"],["credit","Pay later"]];
+function expRange(){ const k=S.ui.expensePeriod||"month", t=todayStr(); if(k==="custom"){ let a=S.ui.expenseFrom||t,b=S.ui.expenseTo||t;if(a>b)[a,b]=[b,a];return[a,b]; } return periodRange(k); }
+function expCalc(f){ const sub=r2(+f.subtotal||0), pct=Math.max(0,+f.gstPct||0), gst=r2(sub*pct/100), total=r2(sub+gst), paid=f.mode==="credit"?0:Math.min(total,Math.max(0,+f.paid||0)); return{sub,pct,gst,total,paid,bal:r2(total-paid)}; }
+function expRows(){ const st=store(),[from,to]=expRange(), kind=S.ui.expKind||"all", due=S.ui.expDue||"all"; return S.d.expenses.filter(x=>x.storeId===st.id&&x.date>=from&&x.date<=to&&(kind==="all"||x.kind===kind)&&(due!=="due"||+x.total-(+x.paid||0)>.009)).sort((a,b)=>String(b.date||"").localeCompare(String(a.date||""))||String(b.at||"").localeCompare(String(a.at||""))); }
+VIEWS.expenses = () => {
+  if(!canPayroll()) return {title:"Not available",homeBtn:true,body:'<div class="notice">' + ic("warn") + '<div>Only Admin and Store Manager can use purchases and expenses.</div></div>'};
+  const st=store(), k=S.ui.expensePeriod||"month", [from,to]=expRange(), rows=expRows();
+  const purchases=r2(rows.filter(x=>x.kind==="Purchase").reduce((n,x)=>n+(+x.total||0),0)), expenses=r2(rows.filter(x=>x.kind==="Expense").reduce((n,x)=>n+(+x.total||0),0)), due=r2(rows.reduce((n,x)=>n+Math.max(0,(+x.total||0)-(+x.paid||0)),0));
+  return {title:"Purchases & expenses",homeBtn:true,storePick:true,right:'<button class="btn small" data-act="expNew">' + ic("plus") + 'Add</button>',body:
+    '<div class="chips" role="group" aria-label="Period">' + [["today","Today"],["7d","Last 7 days"],["month","This month"],["all","All time"],["custom","Choose dates"]].map(([x,l])=>'<button class="chip" data-act="expensePeriod" data-v="'+x+'" aria-pressed="'+(x===k)+'">'+l+'</button>').join("") + '</div>' +
+    (k==="custom"?'<div class="grid2 card pad"><label class="f"><span>From</span><input class="in" id="expFrom" type="date" value="'+esc(from)+'"></label><label class="f"><span>To</span><input class="in" id="expTo" type="date" value="'+esc(to)+'"></label></div>':"") +
+    '<div class="seg"><button data-act="expKind" data-v="all" aria-pressed="'+((S.ui.expKind||"all")==="all")+'">All</button><button data-act="expKind" data-v="Purchase" aria-pressed="'+(S.ui.expKind==="Purchase")+'">Purchases</button><button data-act="expKind" data-v="Expense" aria-pressed="'+(S.ui.expKind==="Expense")+'">Expenses</button></div>' +
+    '<div class="stats"><div class="stat"><b>'+money(purchases)+'</b><span>Purchases</span></div><div class="stat"><b>'+money(expenses)+'</b><span>Expenses</span></div><button class="stat clk" data-act="expDue" data-v="'+((S.ui.expDue||"all")==="due"?"all":"due")+'"><b style="color:'+(due?"var(--danger)":"var(--navy)")+'">'+money(due)+'</b><span>'+(S.ui.expDue==="due"?"Showing due · tap for all":"Amount due · tap to filter")+'</span></button></div>' +
+    '<p class="hint">'+esc(fmtDate(from))+(from!==to?" to "+esc(fmtDate(to)):"")+' · '+esc(st.name)+' · paid amounts automatically appear as Out in the cash or bank book.</p>' +
+    (rows.length?'<div class="card list">'+rows.map(x=>{const bal=r2((+x.total||0)-(+x.paid||0));return '<button class="item" data-act="expEdit" data-id="'+esc(x.id)+'"><span class="logo" style="width:40px;height:40px">'+ic(x.kind==="Purchase"?"building":"ledger")+'</span><div class="grow"><div class="t">'+esc(x.no)+' · '+esc(x.category)+'</div><div class="s">'+esc(fmtDate(x.date))+(x.party?' · '+esc(x.party):"")+(x.billNo?' · Bill '+esc(x.billNo):"")+' · '+esc((EXP_MODES.find(m=>m[0]===x.mode)||[,x.mode])[1]||"")+'</div></div><div style="text-align:right"><b class="num">'+money(x.total)+'</b>'+(bal?'<div class="s" style="color:var(--danger)">Due '+money(bal)+'</div>':'<div class="s" style="color:var(--ok)">Paid</div>')+'</div><span class="chev">›</span></button>';}).join("")+'</div>':'<div class="empty"><div class="ic">'+ic("ledger")+'</div><h2>No entries</h2><p class="hint">Add a purchase or expense for this period.</p></div>') +
+    (rows.length?'<button class="btn ghost" data-act="expCsv">'+ic("download")+'Download CSV</button>':""),
+    after:()=>{const a=document.getElementById("expFrom"),b=document.getElementById("expTo");if(a)a.onchange=()=>{S.ui.expenseFrom=a.value;render();};if(b)b.onchange=()=>{S.ui.expenseTo=b.value;render();};}};
+};
+VIEWS.expenseEdit = (id) => {
+  if(!canPayroll()) return {title:"Not available",homeBtn:true,body:""};
+  const f=S.form&&S.form._kind==="expense"?S.form:null;if(!f)return {title:"Entry",homeBtn:true,body:""}; const C=expCalc(f), cats=EXP_CATS[f.kind]||EXP_CATS.Expense;
+  return {title:(id?"Edit ":"Add ")+(f.kind==="Purchase"?"purchase":"expense"),editing:true,body:
+    '<div class="seg"><button data-act="expFormKind" data-v="Purchase" aria-pressed="'+(f.kind==="Purchase")+'">Purchase</button><button data-act="expFormKind" data-v="Expense" aria-pressed="'+(f.kind==="Expense")+'">Expense</button></div>' +
+    '<div class="card pad stack"><div class="grid2"><label class="f"><span>Date *</span><input class="in" id="exDate" type="date" max="'+todayStr()+'" value="'+esc(f.date)+'"></label><label class="f"><span>Category *</span><select class="in" id="exCat">'+cats.map(x=>'<option'+(x===f.category?' selected':'')+'>'+esc(x)+'</option>').join("")+'</select></label></div>' +
+    '<label class="f"><span>Supplier / payee *</span><input class="in" id="exParty" list="vendorNames" placeholder="Who was paid?" value="'+esc(f.party||"")+'"><datalist id="vendorNames">'+S.d.vendors.map(v=>'<option value="'+esc(v.name)+'"></option>').join("")+'</datalist></label>' +
+    '<div class="grid2"><label class="f"><span>Supplier bill no.</span><input class="in" id="exBill" value="'+esc(f.billNo||"")+'"></label><label class="f"><span>Due date</span><input class="in" id="exDueDate" type="date" value="'+esc(f.dueDate||"")+'"></label></div>' +
+    '<label class="f"><span>What was purchased / paid for? *</span><textarea class="in" id="exDesc" placeholder="Short description">'+esc(f.description||"")+'</textarea></label>' +
+    '<div class="grid2"><label class="f"><span>Amount before GST (₹) *</span><input class="in num" id="exSub" type="number" min="0" step="0.01" value="'+esc(f.subtotal)+'"></label><label class="f"><span>GST %</span><select class="in" id="exGst">'+[0,5,12,18,28].map(x=>'<option value="'+x+'"'+(+f.gstPct===x?' selected':'')+'>'+x+'%</option>').join("")+'</select></label></div>' +
+    '<div class="card pad" style="background:var(--sunk)"><div class="sumrow"><span>GST</span><b id="exGstAmt">'+money(C.gst)+'</b></div><div class="sumrow big"><span>Total</span><b id="exTotal">'+money(C.total)+'</b></div></div>' +
+    '<div class="f stack"><span>Payment mode</span><div class="chips">'+EXP_MODES.map(([m,l])=>'<button class="chip" data-act="expMode" data-v="'+m+'" aria-pressed="'+(f.mode===m)+'">'+l+'</button>').join("")+'</div></div>' +
+    (f.mode!=="credit"?'<label class="f"><span>Amount paid now (₹)</span><input class="in num" id="exPaid" type="number" min="0" step="0.01" value="'+esc(f.paid)+'"><small class="hint">Leave the balance as due if not fully paid.</small></label>':'<div class="notice info">'+ic("receipt")+'<div>Pay later: the full total stays due and no cash/bank entry is made yet.</div></div>') +
+    '<label class="f"><span>Notes</span><input class="in" id="exNote" value="'+esc(f.note||"")+'"></label></div>',
+    foot:'<button class="btn" data-act="expSave">Save '+(f.kind==="Purchase"?"purchase":"expense")+'</button>',
+    after:()=>{const bind=(id,k)=>{const e=document.getElementById(id);if(e)e.oninput=()=>f[k]=e.value;};bind("exDate","date");bind("exCat","category");bind("exParty","party");bind("exBill","billNo");bind("exDueDate","dueDate");bind("exDesc","description");bind("exSub","subtotal");bind("exPaid","paid");bind("exNote","note");const g=document.getElementById("exGst");if(g)g.onchange=()=>{f.gstPct=g.value;render();};}};
+};
 /* ---------- follow-up data ---------- */
 const liveOrders = st => S.d.orders.filter(o => o.storeId === st.id && o.status !== "Cancelled");
 const pkReqs = st => S.d.pickups.filter(p => p.storeId === st.id && !["Cancelled", "Billed"].includes(p.status));
@@ -861,7 +903,7 @@ VIEWS.mis = () => {
   return { title: "Reports", back: false, storePick: true, nav: "mis", right: '<button class="btn small ghost" data-act="go" data-v="export">' + ic("download") + 'Excel</button>',
     body: '<div class="chips" role="group" aria-label="Period">' + PERIODS.map(([k, l]) => '<button class="chip" data-act="period" data-p="' + k + '" aria-pressed="' + (k === pk) + '">' + l + '</button>').join("") + '</div>' +
       '<p class="hint">' + (pk === "all" ? "All dates" : esc(fmtDate(from)) + (from !== to ? " to " + esc(fmtDate(to)) : "")) + ' · ' + esc(st.name) + ' · tap any figure for the breakup</p>' +
-      '<p class="sec-title">Reports</p><div class="tiles rtiles">' + [["rptStage", "layers", "Work stages"], ["rptOverdue", "warn", "Late bills"], ["rptBills", "receipt", "Bills"], ["rptWorkers", "users", "Piece work"], ["rptStaffWork", "cal", "Staff activity"], ["rptComplaints", "chat", "Complaints"], ["rptRework", "repeat", "Re-work"], ["rptRiders", "bike", "Rider work"], ...(canPayroll() ? [["attMonth", "cal", "Attendance"], ["salReg", "sheet", "Salary"], ["advances", "rupee", "Advances"], ["rptLabour", "chart", "Staff cost"]] : []), ...(isAdmin() || allowedStores().length > 1 ? [["rptStores", "store", "Store summary"]] : [])].map(([v, i, l]) => '<button class="tile" data-act="go" data-v="' + v + '"><span class="ic">' + ic(i) + '</span><b>' + l + '</b></button>').join("") + '</div>' +
+      '<p class="sec-title">Reports</p><div class="tiles rtiles">' + [["rptStage", "layers", "Work stages"], ["rptOverdue", "warn", "Late bills"], ["rptBills", "receipt", "Bills"], ["rptWorkers", "users", "Piece work"], ["rptStaffWork", "cal", "Staff activity"], ["rptComplaints", "chat", "Complaints"], ["rptRework", "repeat", "Re-work"], ["rptRiders", "bike", "Rider work"], ...(canPayroll() ? [["expenses", "ledger", "Purchases & expenses"], ["attMonth", "cal", "Attendance"], ["salReg", "sheet", "Salary"], ["advances", "rupee", "Advances"], ["rptLabour", "chart", "Staff cost"]] : []), ...(isAdmin() || allowedStores().length > 1 ? [["rptStores", "store", "Store summary"]] : [])].map(([v, i, l]) => '<button class="tile" data-act="go" data-v="' + v + '"><span class="ic">' + ic(i) + '</span><b>' + l + '</b></button>').join("") + '</div>' +
       '<p class="sec-title">Summary</p><div class="stats">' + T("booked", money(bVal), "Booked · " + booked.length + " bills") + T("coll", money(coll), "Collected · " + pays.length + " entries") + T("deliv", delPcs, "Pcs delivered · " + delivs.length) + '</div>' +
       '<p class="sec-title">Follow-up · as on now</p><div class="stats" style="grid-template-columns:1fr 1fr">' +
         T("go:rptPickups", pp.length, "Pending pickups" + (odP ? ' · <b style="color:var(--danger);font-size:12px;display:inline">' + odP + ' late</b>' : "")) +
@@ -2879,13 +2921,13 @@ function closingDoc(K, C){
 
 /* ---------- export ---------- */
 VIEWS.export = () => {
-  const pk = S.ui.expPeriod || "month"; const [from, to] = periodRange(pk); const sh = S.ui.expSheets ||= {orders: true, lines: true, receipts: true, customers: true};
+  const pk = S.ui.expPeriod || "month"; const [from, to] = periodRange(pk); const sh = S.ui.expSheets ||= {orders: true, lines: true, receipts: true, expenses: true, customers: true};
   const st = store(); const scope = S.ui.expScope || "store";
   return { title: "Export to Excel", homeBtn: true,
     body: '<p class="hint">Download your data as an Excel file for backup and accounts. Keep a weekly backup.</p>' +
       '<p class="sec-title">Period (order / receipt date)</p><div class="chips">' + PERIODS.map(([k, l]) => '<button class="chip" data-act="expPeriod" data-p="' + k + '" aria-pressed="' + (k === pk) + '">' + l + '</button>').join("") + '</div>' +
       '<p class="sec-title">Stores</p><div class="seg"><button data-act="expScope" data-v="store" aria-pressed="' + (scope === "store") + '">' + esc(st ? st.name : "Current store") + '</button><button data-act="expScope" data-v="all" aria-pressed="' + (scope === "all") + '">All my stores</button></div>' +
-      '<p class="sec-title">Sheets</p><div class="card pad">' + [["orders", "Orders – one row per bill"], ["lines", "Order items – one row per item"], ["receipts", "Receipts and refunds"], ["customers", "Customer master (all customers)"]].map(([k, l]) => '<label class="switch"><span>' + l + '</span><input type="checkbox" class="tg" data-act="expSheet" data-k="' + k + '"' + (sh[k] ? " checked" : "") + '></label>').join("") + '</div>',
+      '<p class="sec-title">Sheets</p><div class="card pad">' + [["orders", "Orders – one row per bill"], ["lines", "Order items – one row per item"], ["receipts", "Receipts and refunds"], ["expenses", "Purchases and expenses"], ["customers", "Customer master (all customers)"]].map(([k, l]) => '<label class="switch"><span>' + l + '</span><input type="checkbox" class="tg" data-act="expSheet" data-k="' + k + '"' + (sh[k] ? " checked" : "") + '></label>').join("") + '</div>',
     foot: '<button class="btn" data-act="doExport">' + ic("download") + 'Download Excel</button>' };
 };
 async function doExport(){
@@ -2898,6 +2940,8 @@ async function doExport(){
     ...os.filter(o => inR(o.date)).map(o => [o.date, fmtTime(o.createdAt).split(", ").pop(), o.no, stName(o.storeId), o.cust.code, o.cust.name, o.cust.mobile, [...new Set(o.lines.map(l => l.svcName))].join(", "), o.pieces, o.sub, o.express || 0, o.pickup || 0, o.gst || 0, o.roundOff || 0, o.total, paidOf(o), balOf(o), o.status, o.deliveryDate, o.rework ? o.rework.ofNo : "", o.by || "", o.cancel ? o.cancel.reason : ""])], [11, 9, 16, 16, 10, 20, 12, 22, 7, 10, 8, 7, 8, 8, 10, 10, 10, 14, 11, 14, 14, 18]);
   if (sh.lines) { const rows = [["Date", "Order no", "Customer", "Service", "Item", "UOM", "Qty", "Pieces", "Rate", "Amount", "Speed", "Colour", "Status"]]; os.filter(o => inR(o.date)).forEach(o => o.lines.forEach(l => rows.push([o.date, o.no, o.cust.name, l.svcName, l.name, l.uom, l.qty, l.pcs, l.rate, l.amt, l.speed, l.color || "", o.status]))); add("Order items", rows, [11, 16, 20, 14, 22, 7, 6, 7, 8, 10, 9, 10, 14]); }
   if (sh.receipts) { const rows = [["Date", "Time", "Receipt no", "Order no", "Store", "Customer", "Mobile", "Mode", "Amount", "Type", "Reference", "By"]]; os.forEach(o => (o.payments || []).forEach(p => { if (inR(p.date)) rows.push([p.date, fmtTime(p.at).split(", ").pop(), p.no, o.no, stName(o.storeId), o.cust.name, o.cust.mobile, MODE_NAMES[p.mode] || p.mode, p.amount, p.kind === "refund" ? "Refund" : "Receipt", p.ref || "", p.by || ""]); })); add("Receipts", rows, [11, 9, 12, 16, 16, 20, 12, 9, 10, 9, 14, 14]); }
+  if (sh.expenses) add("Purchases expenses", [["Date", "Entry no", "Store", "Type", "Category", "Supplier / payee", "Supplier bill no", "Description", "Subtotal", "GST %", "GST", "Total", "Paid", "Due", "Payment mode", "Due date", "Notes", "By"],
+    ...S.d.expenses.filter(x => stIds.includes(x.storeId) && inR(x.date)).sort((a,b) => String(a.date).localeCompare(String(b.date))).map(x => [x.date,x.no,stName(x.storeId),x.kind,x.category,x.party||"",x.billNo||"",x.description||"",+x.subtotal||0,+x.gstPct||0,+x.gst||0,+x.total||0,+x.paid||0,r2((+x.total||0)-(+x.paid||0)),(EXP_MODES.find(m=>m[0]===x.mode)||[,x.mode])[1]||"",x.dueDate||"",x.note||"",x.by||""])], [11,16,16,10,20,22,16,28,11,8,10,11,11,11,14,11,24,16]);
   if (sh.customers) add("Customers", [["Customer ID", "Name", "Mobile", "Price list", "Apartment", "Flat", "Road", "Area", "City", "Distance km", "Latitude", "Longitude", "Birthday", "Anniversary", "Route", "Blocked"],
     ...sorted("customers").map(c => [c.custCode || "", c.name, c.mobile, plName(custPl(c)), c.apartment || "", c.flat || "", c.road || "", c.area || "", c.city || "", c.distanceKm ?? "", c.lat || "", c.lng || "", dmLabel(c.bday), dmLabel(c.anniv), (find("routes", c.route) || {}).name || "", c.blocked ? "Yes" : ""])], [10, 20, 12, 12, 18, 8, 10, 14, 10, 8, 10, 10, 9, 11, 10, 7]);
   if (!wb.SheetNames.length) return toast("Select at least one sheet.");
@@ -3398,7 +3442,7 @@ function loadLogo(file){
   fr.readAsDataURL(file);
 }
 async function nextNo(st, kind){
-  const v = (st.vouchers || {})[kind] || ({pickup: {prefix: (st.code || "") + "-PK-", start: 1}, challan: {prefix: (st.code || "") + "-CH-", start: 1}, complaint: {prefix: (st.code || "") + "-CMP-", start: 1}, trip: {prefix: (st.code || "") + "-TR-", start: 1}}[kind]) || {}; const start = parseInt(v.start) || 1; const fmt = n => (v.prefix || "") + n + (v.suffix || "");
+  const v = (st.vouchers || {})[kind] || ({pickup: {prefix: (st.code || "") + "-PK-", start: 1}, challan: {prefix: (st.code || "") + "-CH-", start: 1}, complaint: {prefix: (st.code || "") + "-CMP-", start: 1}, trip: {prefix: (st.code || "") + "-TR-", start: 1}, purchase: {prefix: (st.code || "") + "-PUR-", start: 1}, expense: {prefix: (st.code || "") + "-EXP-", start: 1}}[kind]) || {}; const start = parseInt(v.start) || 1; const fmt = n => (v.prefix || "") + n + (v.suffix || "");
   if (!S.db) { const key = st.id + "_" + kind; S.counters[key] = (S.counters[key] ?? start - 1) + 1; return fmt(S.counters[key]); }
   const ref = S.db.doc("counters/" + st.id + "_" + kind);
   if (S.fire) { const n = await S.db.runTransaction(async tx => { const s0 = await tx.get(ref); const body = s0.exists ? s0.data() : {}; const cur = typeof body.last === "number" && body.start === start ? body.last : start - 1; tx.set(ref, {last: cur + 1, start, storeId: st.id, kind}); return cur + 1; }); return fmt(n); }
@@ -3884,6 +3928,19 @@ const ACT = {
   expScope: el => { S.ui.expScope = el.dataset.v; render(); },
   expSheet: el => { S.ui.expSheets[el.dataset.k] = el.checked; },
   doExport: () => doExport(),
+  expNew: () => { if(!canPayroll()) return; S.form={_kind:"expense",kind:"Purchase",date:todayStr(),category:EXP_CATS.Purchase[0],party:"",billNo:"",dueDate:"",description:"",subtotal:"",gstPct:0,mode:"cash",paid:"",note:""}; go("expenseEdit"); },
+  expEdit: el => { if(!canPayroll()) return; const x=find("expenses",el.dataset.id); if(!x)return; S.form={...clone(x),_kind:"expense"}; go("expenseEdit:"+x.id); },
+  expensePeriod: el => { S.ui.expensePeriod=el.dataset.v; if(el.dataset.v==="custom"){S.ui.expenseFrom ||= todayStr();S.ui.expenseTo ||= todayStr();} render(); },
+  expKind: el => { S.ui.expKind=el.dataset.v; render(); },
+  expDue: el => { S.ui.expDue=el.dataset.v; render(); },
+  expFormKind: el => { const f=S.form;if(!f||f._kind!=="expense")return;f.kind=el.dataset.v;f.category=EXP_CATS[f.kind][0];render(); },
+  expMode: el => { const f=S.form;if(!f||f._kind!=="expense")return;f.mode=el.dataset.v;if(f.mode==="credit")f.paid=0;render(); },
+  expSave: async el => { if(!canPayroll())return;const f=S.form;if(!f||f._kind!=="expense")return;const st=store(),C=expCalc(f),editing=!!f.id;
+    if(!f.date||!f.category||!String(f.party||"").trim()||!String(f.description||"").trim())return toast("Fill date, category, supplier / payee and description.");
+    if(C.sub<=0)return toast("Enter an amount greater than zero.");let paid=f.mode==="credit"?0:(String(f.paid??"").trim()===""?C.total:Math.max(0,+f.paid||0));if(paid>C.total+.009)return toast("Paid amount cannot be more than the total.");
+    el.disabled=true;let id=f.id||newId();const ok=await guard(async()=>{const no=f.no||await nextNo(st,f.kind==="Purchase"?"purchase":"expense");await save("expenses",{id,no,storeId:st.id,kind:f.kind,date:f.date,category:f.category,party:String(f.party).trim(),billNo:String(f.billNo||"").trim(),dueDate:f.dueDate||"",description:String(f.description).trim(),subtotal:C.sub,gstPct:C.pct,gst:C.gst,total:C.total,paid:r2(paid),mode:f.mode,note:String(f.note||"").trim(),at:f.at||new Date().toISOString(),updatedAt:new Date().toISOString(),by:f.by||empName(),updatedBy:empName()});},editing?"Entry updated":"Entry saved");
+    if(ok){S.form=null;S.stack=S.stack.filter(x=>!String(x.view).startsWith("expenseEdit"));S.view="expenses";render();}else el.disabled=false; },
+  expCsv: () => { if(!canPayroll())return;const rows=expRows(),head=["Date","Entry no","Type","Category","Supplier / payee","Supplier bill no","Description","Subtotal","GST %","GST","Total","Paid","Due","Payment mode","Due date","Notes","By"],q=v=>'"'+String(v??"").replace(/"/g,'""')+'"';const out=[head,...rows.map(x=>[x.date,x.no,x.kind,x.category,x.party||"",x.billNo||"",x.description||"",+x.subtotal||0,+x.gstPct||0,+x.gst||0,+x.total||0,+x.paid||0,r2((+x.total||0)-(+x.paid||0)),(EXP_MODES.find(m=>m[0]===x.mode)||[,x.mode])[1]||"",x.dueDate||"",x.note||"",x.by||""])].map(r=>r.map(q).join(",")).join("\n");download("purchases-expenses-"+todayStr()+".csv",out); },
   pickDate: el => { const d = S.draft; if (!d) return; if (el.dataset.k === "pickup") { d.pickupDate = el.dataset.v; d.pickupSlot = ""; } else { d.deliveryDate = el.dataset.v; d._autoWas = calcTotals(d, store()).autoDelivery; d.deliverySlot = ""; } render(); },
   splitOrder: async el => {
     const o = find("orders", el.dataset.id); if (!o || !canEdit(o) || orderSvcs(o).length < 2) return toast("Only unpaid, undelivered orders with more than one service can be split.");
@@ -4092,7 +4149,7 @@ document.addEventListener("change", e => {
 /* ---------- boot ---------- */
 S.loaded = new Set();
 async function syncAccess(){ /* Login/access records are intentionally disabled. */ }
-const STORE_COLS = new Set(["orders","pickups","complaints","trips","closings","rcash","webreq","attendance","wpays","advances"]);
+const STORE_COLS = new Set(["orders","pickups","complaints","trips","closings","rcash","webreq","attendance","wpays","advances","expenses"]);
 function roleCollections(){
   if (S.isOwner || isAdmin()) return COLS.slice();
   if (roleOf() === "Store manager") return COLS.filter(c => c !== "employees");

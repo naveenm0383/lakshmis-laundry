@@ -105,6 +105,12 @@ service cloud.firestore {
       allow update: if manager() && allowedStore(resource.data.storeId) && request.resource.data.storeId == resource.data.storeId;
       allow delete: if admin() && allowedStore(resource.data.storeId);
     }
+    match /expenses/{id} {
+      allow read: if manager() && allowedStore(resource.data.storeId);
+      allow create: if manager() && allowedStore(request.resource.data.storeId);
+      allow update: if manager() && allowedStore(resource.data.storeId) && request.resource.data.storeId == resource.data.storeId;
+      allow delete: if admin() && allowedStore(resource.data.storeId);
+    }
 
     match /customers/{id} {
       allow read: if activeStaff() && allowedStore(resource.data.homeStore);
