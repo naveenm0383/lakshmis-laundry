@@ -1,4 +1,4 @@
-const CACHE = 'll-v12-production';
+const CACHE = 'll-v13-production';
 const SHELL = [
   './',
   'index.html',

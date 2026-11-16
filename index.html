@@ -346,7 +346,7 @@ const I = {
 const ic = n => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + (I[n] || "") + '</svg>';
 
 /* ---------- state & data ---------- */
-const APP_VER = 74;
+const APP_VER = 75;
 const COLS = ["stores","employees","customers","services","groups","products","routes","pricelists","colors","vendors","orders","closings","workers","pieceRates","wpays","workTypes","pickups","complaints","trips","rcash","attendance","advances","webreq"];
 const S = { db: null, mode: "connecting", d: Object.fromEntries(COLS.map(c => [c, []])), biz: undefined, counters: {},
   stack: [], view: "home", params: {}, form: null, draft: null, storeId: lsGet("ll_store"), empId: lsGet("ll_emp") || null, isOwner: false, userReady: false, skipSetup: false, ui: {}, armed: null,
@@ -1681,7 +1681,7 @@ async function provisionStaffAccount(email, password, name){
   const auth = secondary.auth();
   try {
     const cred = await auth.createUserWithEmailAndPassword(email, password);
-    if (cred.user) { if (name) await cred.user.updateProfile({displayName:name}); await cred.user.sendEmailVerification(); }
+    if (cred.user && name) await cred.user.updateProfile({displayName:name});
     return {created:true};
   } catch(e) {
     if (e && e.code === "auth/email-already-in-use") return {created:false, existing:true};
@@ -3572,7 +3572,7 @@ const ACT = {
     if (ent === "pricelists" && rec.isDefault) { for (const p of S.d.pricelists.filter(p => p.isDefault && p.id !== rec.id)) await save("pricelists", {...p, isDefault: false}); }
     if (ent === "services" && rec.code) rec.code = String(rec.code).toUpperCase();
     if (ent === "customers") delete rec.priceLists;
-    let sid, accountResult; if (await guard(async () => { if (ent === "workers" && rec.appAccess && tempPassword) accountResult = await provisionStaffAccount(rec.email, tempPassword, rec.name); sid = await save(ent, rec); }, E.one + " saved")) { if (accountResult && accountResult.created) toast("Staff saved. A verification email was sent before first login."); else if (accountResult && accountResult.existing) toast("Staff saved. This email already has a login; use password setup if needed."); if (ent === "customers" && S.ui.custReturn && S.draft) { S.draft.custId = sid; S.draft.custQ = ""; S.ui.custReturn = false; } S.form = null; back(); }
+    let sid, accountResult; if (await guard(async () => { if (ent === "workers" && rec.appAccess && tempPassword) accountResult = await provisionStaffAccount(rec.email, tempPassword, rec.name); sid = await save(ent, rec); }, E.one + " saved")) { if (accountResult && accountResult.created) toast("Staff login created. Email and password can be used immediately."); else if (accountResult && accountResult.existing) toast("Staff saved. This email already has a login; use password setup if needed."); if (ent === "customers" && S.ui.custReturn && S.draft) { S.draft.custId = sid; S.draft.custQ = ""; S.ui.custReturn = false; } S.form = null; back(); }
   },
   del: async el => {
     const ent = el.dataset.ent;
@@ -4043,8 +4043,6 @@ async function bootFire(){
     S.authUser = u || null; S.access = null; S.accessDenied = false; S.userReady = false;
     if (!u) { render(); return; }
     const email = String(u.email || "").trim().toLowerCase();
-    const passwordLogin = (u.providerData || []).some(p => p && p.providerId === "password");
-    if (passwordLogin && !u.emailVerified) { S.fireErr = "Verify this email before signing in. Open the verification message sent when the account was created."; S.accessDenied = true; render(); return; }
     if (email === OWNER_EMAIL) S.access = {email, name:u.displayName || "Naveen Malapati", role:"Admin", stores:[], active:true};
     else { try { const d = await fs.collection("staffAccess").doc(email).get(); if (d.exists && d.data().active === true) S.access = d.data(); else S.accessDenied = true; } catch(e) { console.error(e); S.accessDenied = true; } }
     if (S.accessDenied) { render(); return; }

@@ -21,9 +21,9 @@ tracking.
 - Staff login: the owner adds the employee in **Masters → Staff & email
   access**, enters the employee's email, selects a role and permitted store,
   then switches on **Can use the staff app**. Staff can use Google Sign-In or
-  verified email/password login. A temporary password is never stored in
-  Firestore; the employee verifies the email and can use the password setup
-  link to choose a private password.
+  email/password login. A temporary password is never stored in Firestore and
+  can be used immediately; the password setup link remains available when an
+  employee needs to choose a new private password.
 - Roles: Admin, Store manager, Store staff (simple counter), Processing,
   and Rider. Admin has full operations for assigned stores, while only the
   owner can create or approve staff logins. Other staff see only the screens

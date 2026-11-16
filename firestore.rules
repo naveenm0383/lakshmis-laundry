@@ -4,10 +4,9 @@ service cloud.firestore {
     function signedIn() { return request.auth != null && request.auth.token.email != null; }
     function email() { return signedIn() ? request.auth.token.email.lower() : ""; }
     function owner() { return email() == "naveenm0383@gmail.com"; }
-    function verified() { return signedIn() && request.auth.token.email_verified == true; }
     function accessExists() { return signedIn() && exists(/databases/$(database)/documents/staffAccess/$(email())); }
     function access() { return get(/databases/$(database)/documents/staffAccess/$(email())).data; }
-    function activeStaff() { return owner() || (verified() && accessExists() && access().active == true); }
+    function activeStaff() { return owner() || (accessExists() && access().active == true); }
     function role(r) { return owner() || (activeStaff() && access().role == r); }
     function manager() { return owner() || role("Admin") || role("Store manager"); }
     function counter() { return role("Store staff"); }
@@ -34,7 +33,7 @@ service cloud.firestore {
     }
 
     match /staffAccess/{staffEmail} {
-      allow read: if owner() || (verified() && staffEmail == email());
+      allow read: if owner() || (signedIn() && staffEmail == email());
       allow create, update, delete: if owner();
     }
 
