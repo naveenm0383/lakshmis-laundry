@@ -23,16 +23,28 @@ service cloud.firestore {
         request.resource.data.storeId == resource.data.storeId;
     }
     function processingOrderFields() {
-      return !request.resource.data.diff(resource.data).affectedKeys().hasAny([
-        'storeId','no','cust','lines','pieces','sub','express','pickup','gst','roundOff','total',
-        'priceList','payments','delivered','deliveries','adjs','createdAt','createdBy','by','date'
-      ]);
+      return request.resource.data.no == resource.data.no
+        && request.resource.data.cust == resource.data.cust
+        && request.resource.data.lines == resource.data.lines
+        && request.resource.data.pieces == resource.data.pieces
+        && request.resource.data.total == resource.data.total
+        && request.resource.data.priceList == resource.data.priceList
+        && request.resource.data.get('payments', []) == resource.data.get('payments', [])
+        && request.resource.data.get('delivered', {}) == resource.data.get('delivered', {})
+        && request.resource.data.get('deliveries', []) == resource.data.get('deliveries', [])
+        && request.resource.data.get('adjs', []) == resource.data.get('adjs', []);
     }
     function riderOrderFields() {
-      return !request.resource.data.diff(resource.data).affectedKeys().hasAny([
-        'storeId','no','cust','lines','pieces','sub','express','pickup','gst','roundOff','total',
-        'priceList','flow','jobs','iron','adjs','createdAt','createdBy','by','date'
-      ]);
+      return request.resource.data.no == resource.data.no
+        && request.resource.data.cust == resource.data.cust
+        && request.resource.data.lines == resource.data.lines
+        && request.resource.data.pieces == resource.data.pieces
+        && request.resource.data.total == resource.data.total
+        && request.resource.data.priceList == resource.data.priceList
+        && request.resource.data.get('flow', {}) == resource.data.get('flow', {})
+        && request.resource.data.get('jobs', {}) == resource.data.get('jobs', {})
+        && request.resource.data.get('iron', {}) == resource.data.get('iron', {})
+        && request.resource.data.get('adjs', []) == resource.data.get('adjs', []);
     }
 
     match /staffAccess/{staffEmail} {
