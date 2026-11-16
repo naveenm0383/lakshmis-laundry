@@ -91,11 +91,8 @@ function render(){
       '<label>Area / colony <span class="req">*</span></label><input id="ar" maxlength="80" value="' + esc(F.area || "") + '">';
     app.innerHTML = '<button class="link" data-go="home">← Back</button><div class="card"><h2 style="margin:0 0 4px;color:var(--navy)">Book a pickup</h2>' +
       '<p style="margin:6px 0 0">Mobile: <b>' + esc(F.mobile) + '</b> <button class="link" id="mchg" style="padding:0 0 0 6px">Change</button></p>' +
-      (F.known ? '<div class="msg ok" style="font-size:17px">Welcome back, <b>' + esc(F.kname || "") + '</b>!</div>' +
-          (F.chAddr ? '<p class="hint" style="margin:12px 0 0">Enter the new pickup address:</p>' + addrF + '<button class="link" id="keepaddr">Use my saved address</button>'
-            : '<label>Pickup address</label><div class="msg" style="background:var(--soft);color:var(--navy);margin-top:0">' + (F.kaddr ? esc(F.kaddr) + '<div class="hint">Saved address (partly hidden for your privacy)</div>' : 'We will use your saved address.') + '</div><button class="link" id="chaddr">Change address</button>')
-        : '<p class="hint" style="margin:8px 0 0">New customer – please fill your details. The store will call you to confirm.</p>' +
-          '<label>Your name <span class="req">*</span></label><input id="nm" maxlength="60" autocomplete="name" value="' + esc(F.name || "") + '">' + addrF) +
+      '<p class="hint" style="margin:8px 0 0">Enter the pickup details each time. Saved customer addresses are never shown on this public page.</p>' +
+      '<label>Your name <span class="req">*</span></label><input id="nm" maxlength="60" autocomplete="name" value="' + esc(F.name || "") + '">' + addrF +
       '<label>Pickup day <span class="req">*</span></label><div class="chips">' + days.map(function(d){ return '<button class="chip" data-date="' + d + '" aria-pressed="' + (d === F.date) + '">' + (d === days[0] ? "Today" : d === days[1] ? "Tomorrow" : esc(fmtDate(d))) + '</button>'; }).join("") + '</div>' +
       '<label>Pickup time <span class="req">*</span></label>' + (sl.length ? '<div class="chips">' + sl.map(function(x){ return '<button class="chip" data-slot="' + x + '" aria-pressed="' + (x === F.slot) + '">' + esc(slotLabel(x)) + '</button>'; }).join("") + '</div>' : '<p class="hint">No pickup time left on this day. Please choose another day.</p>') +
       (svcs.length ? '<label>Services needed (optional)</label><div class="chips">' + svcs.map(function(x){ return '<button class="chip" data-svc="' + esc(x) + '" aria-pressed="' + (F.svcs.indexOf(x) >= 0) + '">' + esc(x) + '</button>'; }).join("") + '</div>' : "") +
@@ -104,46 +101,19 @@ function render(){
     return;
   }
   if (V === "sent") {
-    app.innerHTML = '<div class="card" style="text-align:center"><div style="font-size:44px">✅</div><h2 style="color:var(--ok);margin:6px 0">Request received</h2><p>Thank you, ' + esc(F.name) + '.<br>Pickup asked for <b>' + esc(fmtDate(F.date)) + ', ' + esc(slotLabel(F.slot)) + '</b>.</p><p class="hint">' + (F.known ? 'The store will send a confirmation on WhatsApp to ' + esc(F.mobile) + '.' : 'The store will call you on ' + esc(F.mobile) + ' to confirm.') + '</p></div><button class="big alt" data-go="home">Done</button>';
-    return;
-  }
-  if (V === "track" && !F.byBill) {
-    app.innerHTML = '<button class="link" data-go="home">← Back</button><div class="card"><h2 style="margin:0 0 4px;color:var(--navy)">Track my order</h2><p class="hint" style="margin:0">Enter your mobile number to see your bills with us.</p>' +
-      '<label>Mobile number (10 digits) <span class="req">*</span></label><input id="tm" inputmode="numeric" maxlength="10" value="' + esc(F.mobile || "") + '">' +
-      '<button class="btn" id="findm" style="background:var(--navy)">Show my bills</button><div id="tout"></div>' +
-      '<button class="link" id="bybill">Search by bill number (shows amount and balance)</button></div>';
+    app.innerHTML = '<div class="card" style="text-align:center"><div style="font-size:44px">✅</div><h2 style="color:var(--ok);margin:6px 0">Request received</h2><p>Thank you, ' + esc(F.name) + '.<br>Pickup asked for <b>' + esc(fmtDate(F.date)) + ', ' + esc(slotLabel(F.slot)) + '</b>.</p><p class="hint">The store will call or message ' + esc(F.mobile) + ' to confirm.</p></div><button class="big alt" data-go="home">Done</button>';
     return;
   }
   if (V === "track") {
-    app.innerHTML = '<button class="link" data-go="home">← Back</button><div class="card"><h2 style="margin:0 0 4px;color:var(--navy)">Track my order</h2><p class="hint" style="margin:0">Bill number is printed on your bill and in our WhatsApp message.</p>' +
+    app.innerHTML = '<button class="link" data-go="home">← Back</button><div class="card"><h2 style="margin:0 0 4px;color:var(--navy)">Track my order</h2><p class="hint" style="margin:0">For privacy, enter both the bill number and the mobile number used for the order.</p>' +
       '<label>Bill number <span class="req">*</span></label><input id="bn" autocapitalize="characters" value="' + esc(F.bill || preBill) + '">' +
       '<label>Mobile number (10 digits) <span class="req">*</span></label><input id="tm" inputmode="numeric" maxlength="10" value="' + esc(F.mobile || "") + '">' +
-      '<button class="btn" id="find" style="background:var(--navy)">Show status</button><div id="tout"></div><button class="link" id="bymob">Show all my bills by mobile number</button></div>';
+      '<button class="btn" id="find" style="background:var(--navy)">Show status</button><div id="tout"></div></div>';
   }
 }
 var STEPS = ["Received", "In process", "Ready", "Delivered"];
 function stepOf(stage){ if (/^Delivered/.test(stage)) return 3; if (/With rider|Ready|Partly/.test(stage)) return 2; if (/Pickup booked|Count pending/.test(stage)) return 0; return 1; }
 function friendly(stage){ if (stage === "Pickup booked") return "Pickup booked"; if (stage === "Count pending") return "Received – being checked"; if (stage === "Ready at shop") return "Ready – you can collect from the shop"; if (stage === "With rider") return "Out for delivery"; if (stage === "Partly delivered") return "Partly delivered"; if (stage === "Delivered" || stage === "Cancelled") return stage; return "In process"; }
-var ML = null;
-function billCard(b, i){ var k = stepOf(b.stage); void i; return '<div class="card" style="margin:10px 0 0;background:var(--soft);border:0">' +
-  '<div style="display:flex;justify-content:space-between;gap:8px"><span class="hint">Bill ' + esc(b.no) + ' · ' + esc(fmtDate(b.date)) + '</span><span class="hint">' + (+b.pieces || 0) + ' pcs</span></div><div style="font-weight:800;color:var(--navy);font-size:18px">' + esc(friendly(b.stage)) + '</div>' +
-  (b.stage === "Cancelled" ? "" : '<div class="steps" style="margin:8px 0 4px">' + STEPS.map(function(x, j){ return '<div class="' + (j <= k ? "on" : "") + '">' + x + '</div>'; }).join("") + '</div>') +
-  (b.deliveryDate && !/^Delivered/.test(b.stage) ? '<div class="hint">Expected delivery: <b>' + esc(fmtDate(b.deliveryDate)) + (b.deliverySlot ? ', ' + esc(slotLabel(b.deliverySlot)) : "") + '</b></div>' : "") + '</div>'; }
-async function findMobile(){
-  var out = document.getElementById("tout"); var m = document.getElementById("tm").value.replace(/\D/g, "").slice(-10); F.mobile = m;
-  if (m.length !== 10) { out.innerHTML = '<div class="msg bad">Enter your 10-digit mobile number.</div>'; return; }
-  out.innerHTML = '<p class="hint">Checking…</p>';
-  try { var s = await db.collection("trackm").doc(await sha("llm|" + m)).get(); ML = s.exists ? s.data() : null;
-    if (!ML || (!(ML.open || []).length && !(ML.done || []).length)) { out.innerHTML = '<div class="msg bad">No bills found for this mobile number. Please check the number, or call the store.</div>'; return; }
-    var all = (ML.open || []).concat(ML.done || []);
-    out.innerHTML = '<p style="margin:14px 0 0">Hello <b>' + esc(ML.name || "") + '</b>, ' + ((ML.open || []).length ? 'you have <b>' + ML.open.length + '</b> bill(s) with us.' : 'you have no pending bills.') + '</p>' +
-      (ML.open || []).map(function(b, i){ return billCard(b, i); }).join("") +
-      ((ML.done || []).length ? '<p class="hint" style="margin:16px 0 0">Recently delivered</p>' + ML.done.map(function(b, i){ return billCard(b, (ML.open || []).length + i); }).join("") : "") +
-      '<p class="hint" style="margin-top:12px">For amount and balance, use "Search by bill number" with the number printed on your bill.</p>' +
-      (ML.phone ? '<p class="hint">Questions? Call <a href="tel:+91' + esc(ML.phone) + '">' + esc(ML.phone) + '</a></p>' : "");
-    void all;
-  } catch(e){ out.innerHTML = '<div class="msg bad">Could not check now. Please check your internet and try again.</div>'; }
-}
 async function findOrder(){
   var out = document.getElementById("tout"); var no = document.getElementById("bn").value.toUpperCase().replace(/\s+/g, ""); var m = document.getElementById("tm").value.replace(/\D/g, "").slice(-10);
   F.bill = no; F.mobile = m;
@@ -165,14 +135,10 @@ function keep(){ var g = function(id, k){ var e = document.getElementById(id); i
   g("nm", "name"); g("mb", "mobile"); g("fl", "flat"); g("ap", "apartment"); g("ar", "area"); g("in", "instr"); }
 async function checkMobile(){ keep(); var out = document.getElementById("out"); var m = String(F.mobile || "").replace(/\D/g, "").slice(-10);
   if (m.length !== 10) { out.innerHTML = '<div class="msg bad">Enter your 10-digit mobile number.</div>'; return; }
-  var b = document.getElementById("mcont"); b.disabled = true; b.textContent = "Checking…";
-  var K = null; try { var s = await db.collection("trackm").doc(await sha("llm|" + m)).get(); K = s.exists ? s.data() : null; } catch(e){ K = null; }
-  var hs = K && K.known && K.store && P && P.stores.find(function(x){ return x.id === K.store; }); st = hs || (P && P.stores[0]) || st; F.storeId = hs ? hs.id : "";
-  F.mobile = m; F.known = !!(K && K.known); F.kname = K && K.name || ""; F.kaddr = K && K.addr || ""; F.chAddr = false; F.checked = true; render(); }
+  F.mobile = m; F.known = false; F.storeId = st ? st.id : ""; F.checked = true; render(); }
 async function send(){
-  keep(); var out = document.getElementById("out"); var m = String(F.mobile || "").replace(/\D/g, ""); var needAddr = !F.known || F.chAddr;
-  if (F.known) F.name = F.kname || "Customer"; if (F.known && !F.chAddr) { F.flat = ""; F.apartment = ""; F.area = ""; }
-  var bad = !String(F.name || "").trim() ? "Enter your name." : m.length !== 10 ? "Enter your 10-digit mobile number." : needAddr && !String(F.flat || "").trim() ? "Enter your flat / house number." : needAddr && !String(F.area || "").trim() ? "Enter your area / colony." : !F.slot ? "Choose the pickup time." : !slotOk(F.date, F.slot) ? "That time has passed. Choose another time." : "";
+  keep(); var out = document.getElementById("out"); var m = String(F.mobile || "").replace(/\D/g, "");
+  var bad = !String(F.name || "").trim() ? "Enter your name." : m.length !== 10 ? "Enter your 10-digit mobile number." : !String(F.flat || "").trim() ? "Enter your flat / house number." : !String(F.area || "").trim() ? "Enter your area / colony." : !F.slot ? "Choose the pickup time." : !slotOk(F.date, F.slot) ? "That time has passed. Choose another time." : "";
   if (bad) { out.innerHTML = '<div class="msg bad">' + bad + '</div>'; return; }
   var b = document.getElementById("send"); b.disabled = true; b.textContent = "Sending…";
   try { await db.collection("webreq").add({storeId: F.storeId || "", name: F.name.trim().slice(0, 60), mobile: m, flat: String(F.flat || "").trim().slice(0, 60), apartment: String(F.apartment || "").trim().slice(0, 80), area: String(F.area || "").trim().slice(0, 80), date: F.date, slot: F.slot, svcs: F.svcs.join(", ").slice(0, 200), instr: String(F.instr || "").trim().slice(0, 300), at: new Date().toISOString(), status: "New"});
@@ -188,12 +154,7 @@ document.addEventListener("click", function(e){
   if (el.id === "send") return send();
   if (el.id === "mcont") return checkMobile();
   if (el.id === "mchg") { keep(); F.checked = false; render(); return; }
-  if (el.id === "chaddr") { keep(); F.chAddr = true; render(); return; }
-  if (el.id === "keepaddr") { keep(); F.chAddr = false; render(); return; }
   if (el.id === "find") return findOrder();
-  if (el.id === "findm") return findMobile();
-  if (el.id === "bybill") { var t = document.getElementById("tm"); if (t) F.mobile = t.value; F.byBill = true; render(); return; }
-  if (el.id === "bymob") { var t2 = document.getElementById("tm"); if (t2) F.mobile = t2.value; F.byBill = false; render(); return; }
 });
 document.addEventListener("change", function(e){ if (e.target.id === "stp") { keep(); st = P.stores.find(function(s){ return s.id === e.target.value; }) || st; F.slot = ""; render(); } });
 (async function(){
@@ -201,7 +162,7 @@ document.addEventListener("change", function(e){ if (e.target.id === "stp") { ke
     var s = await db.doc("pub/stores").get(); P = s.exists ? s.data() : null;
   } catch(e){ P = null; }
   if (P && P.stores && P.stores.length) st = P.stores[0];
-  if (preBill) { V = "track"; F.byBill = true; }
+  if (preBill) V = "track";
   render();
 })();
 </script></body></html>

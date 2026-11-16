@@ -346,7 +346,7 @@ const I = {
 const ic = n => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + (I[n] || "") + '</svg>';
 
 /* ---------- state & data ---------- */
-const APP_VER = 72;
+const APP_VER = 73;
 const COLS = ["stores","employees","customers","services","groups","products","routes","pricelists","colors","vendors","orders","closings","workers","pieceRates","wpays","workTypes","pickups","complaints","trips","rcash","attendance","advances","webreq"];
 const S = { db: null, mode: "connecting", d: Object.fromEntries(COLS.map(c => [c, []])), biz: undefined, counters: {},
   stack: [], view: "home", params: {}, form: null, draft: null, storeId: lsGet("ll_store"), empId: lsGet("ll_emp") || null, isOwner: false, userReady: false, skipSetup: false, ui: {}, armed: null,
@@ -354,7 +354,7 @@ const S = { db: null, mode: "connecting", d: Object.fromEntries(COLS.map(c => [c
 
 async function save(col, obj){
   const id = obj.id || newId(); const body = clone(obj); delete body.id; const old = col === "workers" ? find("workers", id) : null;
-  if (S.db) { await S.db.collection(col).doc(id).set(body); const arr = S.d[col]; if (arr) { const i = arr.findIndex(x => x.id === id); const rec = {id, ...clone(body)}; if (i >= 0) arr[i] = rec; else arr.unshift(rec); } if (col === "workers" && S.isOwner) { const key = String(body.email || "").trim().toLowerCase(), oldKey = String((old || {}).email || "").trim().toLowerCase(); if (oldKey && oldKey !== key) await S.db.collection("staffAccess").doc(oldKey).set({active:false},{merge:true}); if (key) await S.db.collection("staffAccess").doc(key).set({email:key, workerId:id, name:body.name || "Staff", role:body.role || "Store staff", stores:body.stores || [], active:body.active !== false && body.appAccess === true}, {merge:true}); } if (col === "orders" && S.fire) trackPut({id, ...clone(body)}).catch(e => console.error(e)); if (col === "customers" && S.fire) trackMob(mob10(body.mobile)).catch(e => console.error(e)); } /* show it at once; live sync confirms */
+  if (S.db) { await S.db.collection(col).doc(id).set(body); const arr = S.d[col]; if (arr) { const i = arr.findIndex(x => x.id === id); const rec = {id, ...clone(body)}; if (i >= 0) arr[i] = rec; else arr.unshift(rec); } if (col === "workers" && S.isOwner) { const key = String(body.email || "").trim().toLowerCase(), oldKey = String((old || {}).email || "").trim().toLowerCase(); if (oldKey && oldKey !== key) await S.db.collection("staffAccess").doc(oldKey).set({active:false},{merge:true}); if (key) await S.db.collection("staffAccess").doc(key).set({email:key, workerId:id, name:body.name || "Staff", role:body.role || "Store staff", stores:body.stores || [], active:body.active !== false && body.appAccess === true}, {merge:true}); } if (col === "orders" && S.fire) trackPut({id, ...clone(body)}).catch(e => console.error(e)); } /* show it at once; live sync confirms */
   else { const arr = S.d[col]; const i = arr.findIndex(x => x.id === id); const rec = {id, ...body}; if (i >= 0) arr[i] = rec; else arr.unshift(rec); }
   return id;
 }
@@ -2247,24 +2247,14 @@ function trackBody(o){ const st = find("stores", o.storeId) || {}; const stage =
   return {no: o.no, name: String((o.cust || {}).name || "").split(" ")[0], stage, date: o.date || "", deliveryDate: o.deliveryDate || "", deliverySlot: o.deliverySlot || "", pieces: +o.pieces || 0, total: r2(o.total), paid: paidOf(o), bal: Math.max(0, balOf(o)), store: st.name || "", phone: st.mobile || "", at: new Date().toISOString()}; }
 async function trackPut(o, batch){ if (!S.fire || !S.db || !o || !o.no || !o.cust) return; const m = mob10(o.cust.mobile); if (m.length !== 10) return;
   const id = await sha("ll|" + normNo(o.no) + "|" + m); const ref = S.db.collection("track").doc(id); const body = trackBody(o); if (batch) batch.set(ref, body); else await ref.set(body);
-  if (!batch) await trackMob(m); }
-const maskNo = n => { const t = String(n || ""); const k = t.replace(/\d(?=\d{2})/g, "•"); return k; };
-function trackMobBody(m){ const mine = S.d.orders.filter(o => o.cust && mob10(o.cust.mobile) === m && o.status !== "Cancelled");
-  const open = mine.filter(o => o.status !== "Delivered"); const done = mine.filter(o => o.status === "Delivered").slice(0, 3);
-  const row = o => { const t = trackBody(o); return {no: maskNo(o.no), date: t.date, stage: t.stage, pieces: t.pieces, deliveryDate: t.deliveryDate, deliverySlot: t.deliverySlot, store: t.store}; };
-  const c = S.d.customers.find(x => mob10(x.mobile) === m && !x.blocked); const nm = String((c || (mine[0] || {}).cust || {}).name || "").trim().split(" ")[0]; const hs = c ? homeStoreId(c) : ""; const st = (hs && find("stores", hs)) || (mine[0] ? find("stores", mine[0].storeId) || {} : (store() || {}));
-  return {name: nm, known: !!c, store: hs, addr: c ? maskAddr(c) : "", phone: st.mobile || "", open: open.map(row), done: done.map(row), at: new Date().toISOString()}; }
-function maskAddr(c){ const hideAll = t => String(t || "").trim().replace(/[^\s](?=[^\s]{1})/g, "•"); const part = t => String(t || "").trim().split(/\s+/).filter(Boolean).map(w => w.length <= 2 ? w : w.slice(0, 2) + "•".repeat(w.length - 2)).join(" ");
-  return [c.flat ? hideAll(c.flat) : "", part(c.apartment), part(c.road), String(c.area || "").trim()].filter(Boolean).join(", "); }
-async function trackMob(m, batch){ if (!S.fire || !S.db || m.length !== 10) return; const ref = S.db.collection("trackm").doc(await sha("llm|" + m)); const body = trackMobBody(m); if (batch) batch.set(ref, body); else await ref.set(body); }
+}
 async function pubSync(){ if (!S.fire || !S.db || !S.biz || !canPayroll() || !S.loaded.has("stores") || !S.loaded.has("services")) return;
   const body = {name: S.biz.name || "", stores: pkStores().map(x => ({id: x.id, name: x.name || "", phone: x.mobile || "", slots: x.pickupSlots || {}})), svcs: activeServices().map(x => x.name)};
   const j = JSON.stringify(body); if (j === S.pubLast) return; S.pubLast = j; try { await S.db.doc("pub/stores").set(body); } catch(e){ S.pubLast = null; console.error(e); } }
-async function trackDaily(){ if (!S.fire || !S.db || S.trkDone || !isAdmin() || !S.loaded.has("orders") || !S.loaded.has("stores") || !S.loaded.has("customers")) return; S.trkDone = true; if (lsGet("ll_trk2") === todayStr()) return;
+async function trackDaily(){ if (!S.fire || !S.db || S.trkDone || !isAdmin() || !S.loaded.has("orders") || !S.loaded.has("stores")) return; S.trkDone = true; if (lsGet("ll_trk2") === todayStr()) return;
   const cut = addDays(todayStr(), -7); const list = S.d.orders.filter(o => !["Delivered", "Cancelled"].includes(o.status) || (o.date || "") >= cut);
-  const mobs = [...new Set(list.map(o => mob10((o.cust || {}).mobile)).concat(S.d.customers.map(c => mob10(c.mobile))).filter(m => m.length === 10))];
   try { for (let i = 0; i < list.length; i += 400) { const b = S.db.batch(); for (const o of list.slice(i, i + 400)) await trackPut(o, b); await b.commit(); }
-    for (let i = 0; i < mobs.length; i += 400) { const b = S.db.batch(); for (const m of mobs.slice(i, i + 400)) await trackMob(m, b); await b.commit(); } lsSet("ll_trk2", todayStr()); } catch(e){ console.error(e); } }
+    lsSet("ll_trk2", todayStr()); } catch(e){ console.error(e); } }
 /* auto-book online requests from existing customers (any open Admin / Store manager app does it once) */
 function wrWhy(r){ const c = S.d.customers.find(x => mob10(x.mobile) === r.mobile); if (!c) return "New customer"; if (c.blocked) return "Customer is blocked";
   const st = find("stores", homeStoreId(c)); if (!st) return "Home store not set"; if (st.webAuto === false) return "Auto-booking is off";
@@ -3527,6 +3517,11 @@ const ACT = {
     const f = S.form; const miss = missingReq([{k:"name", l:"Store name", req:1}, {k:"code", l:"Store code", req:1}, {k:"address", l:"Store address", req:1}], f);
     if (miss.length) { S.ui.storeTab = "general"; render(); return toast("Please fill: " + miss.join(", ")); }
     if (f.gstin && !/^[0-9]{2}[A-Z0-9]{13}$/i.test(String(f.gstin).trim())) { S.ui.storeTab = "general"; render(); return toast("GSTIN should be 15 characters."); }
+    if (f.mobile && !/^\d{10}$/.test(String(f.mobile))) { S.ui.storeTab = "general"; render(); return toast("Store mobile number should be 10 digits."); }
+    if (f.pickup !== false && !Object.values(f.pickupSlots || {}).some(x => Array.isArray(x) && x.length)) { S.ui.storeTab = "pickupSlots"; render(); return toast("Add at least one pickup time, or switch pickup off under General."); }
+    if (f.pickup !== false && !/^\d{10}$/.test(String(f.mobile || ""))) { S.ui.storeTab = "general"; render(); return toast("Add the store mobile number before enabling customer pickup."); }
+    if ((f.payModes || {}).upi !== false && !String(f.upiId || "").trim()) { S.ui.storeTab = "payment"; render(); return toast("Add the store UPI ID, or switch UPI off."); }
+    if ((f.discLimitAmt === "" || f.discLimitAmt == null) && (f.discLimitPct === "" || f.discLimitPct == null)) { S.ui.storeTab = "payment"; render(); return toast("Set a Store Manager discount limit. Enter 0 to require Admin approval."); }
     const rec = clone(f); delete rec._kind; delete rec.storeForm; rec.gstin = String(rec.gstin || "").trim().toUpperCase(); rec.code = String(rec.code).trim().toUpperCase();
     delete rec.stages; const ss = {}; Object.entries(rec.svcStages || {}).forEach(([sid, arr]) => { const seen = new Set(); ss[sid] = (arr || []).map(x => ({name: String(x.name || "").trim(), optional: !!x.optional, track: x.track !== undefined ? !!x.track : /iron/i.test(String(x.name || "")), work: x.work || (/iron/i.test(String(x.name || "")) ? "Ironing" : "")})).filter(x => x.name && !/^(received|ready|out for delivery|delivered)$/i.test(x.name) && !seen.has(x.name.toLowerCase()) && seen.add(x.name.toLowerCase())); }); rec.svcStages = ss;
     if (!rec.priceList || !find("pricelists", rec.priceList)) { try { rec.priceList = await ensureStandard(); } catch(e){} }

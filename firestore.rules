@@ -23,6 +23,15 @@ service cloud.firestore {
       return activeStaff() && allowedStore(resource.data.storeId) &&
         request.resource.data.storeId == resource.data.storeId;
     }
+    function processingOrderFields() {
+      return request.resource.data.diff(resource.data).affectedKeys()
+        .hasOnly(['flow','status','history','jobs','iron']);
+    }
+    function riderOrderFields() {
+      return request.resource.data.diff(resource.data).affectedKeys()
+        .hasOnly(['status','trip','history','payments','delivered','deliveries','deliveredOn',
+          'pickedUp','pickedAt','pickedBy','received','receivedAt','receivedBy','homeDel']);
+    }
 
     match /staffAccess/{staffEmail} {
       allow read: if owner() || (verified() && staffEmail == email());
@@ -46,16 +55,18 @@ service cloud.firestore {
       allow write: if activeStaff();
     }
     match /trackm/{document} {
-      allow get: if true;
-      allow list: if false;
-      allow write: if activeStaff();
+      allow read, write: if false;
     }
 
     match /webreq/{document} {
       allow create: if !signedIn()
         && request.resource.data.keys().hasOnly(['storeId','name','mobile','flat','apartment','area','date','slot','svcs','instr','at','status'])
         && request.resource.data.status == 'New'
+        && request.resource.data.storeId is string && request.resource.data.storeId.size() >= 1 && request.resource.data.storeId.size() <= 100
         && request.resource.data.mobile is string && request.resource.data.mobile.matches('^[0-9]{10}$')
+        && request.resource.data.date is string && request.resource.data.date.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
+        && request.resource.data.slot is string && request.resource.data.slot.matches('^[0-9]{2}:[0-9]{2}-[0-9]{2}:[0-9]{2}$')
+        && request.resource.data.at is string && request.resource.data.at.size() >= 20 && request.resource.data.at.size() <= 40
         && request.resource.data.name is string && request.resource.data.name.size() >= 1 && request.resource.data.name.size() <= 60
         && request.resource.data.flat is string && request.resource.data.flat.size() <= 60
         && request.resource.data.apartment is string && request.resource.data.apartment.size() <= 80
@@ -105,13 +116,21 @@ service cloud.firestore {
 
     match /vendors/{id} { allow read, write: if manager(); }
 
+    match /orders/{id} {
+      allow read: if canReadStoreDoc();
+      allow create: if canCreateStoreDoc() && (manager() || counter() || processing() || rider());
+      allow update: if canUpdateStoreDoc() &&
+        (manager() || counter() || (processing() && processingOrderFields()) || (rider() && riderOrderFields()));
+      allow delete: if manager() && canReadStoreDoc();
+    }
+
     match /{collection}/{id} {
-      allow read: if collection in ['orders','pickups','complaints','trips','closings','rcash'] && canReadStoreDoc();
-      allow create: if collection in ['orders','pickups','complaints','trips','closings','rcash'] && canCreateStoreDoc() &&
-        (manager() || counter() || (processing() && collection == 'orders') || (rider() && collection in ['orders','pickups','complaints','trips','rcash']));
-      allow update: if collection in ['orders','pickups','complaints','trips','closings','rcash'] && canUpdateStoreDoc() &&
-        (manager() || counter() || (processing() && collection == 'orders') || (rider() && collection in ['orders','pickups','complaints','trips','rcash']));
-      allow delete: if collection in ['orders','pickups','complaints','trips','closings','rcash'] && manager() && canReadStoreDoc();
+      allow read: if collection in ['pickups','complaints','trips','closings','rcash'] && canReadStoreDoc();
+      allow create: if collection in ['pickups','complaints','trips','closings','rcash'] && canCreateStoreDoc() &&
+        (manager() || counter() || (rider() && collection in ['pickups','complaints','trips','rcash']));
+      allow update: if collection in ['pickups','complaints','trips','closings','rcash'] && canUpdateStoreDoc() &&
+        (manager() || counter() || (rider() && collection in ['pickups','complaints','trips','rcash']));
+      allow delete: if collection in ['pickups','complaints','trips','closings','rcash'] && manager() && canReadStoreDoc();
     }
 
     match /counters/{id} {

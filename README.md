@@ -38,9 +38,13 @@ starter rates in **Masters → Product rates** before production use.
 - `firestore.rules` is the production authorization policy. The owner controls
   staff accounts; managers are limited to permitted stores; processing and
   rider accounts receive only their operational and personal pay data.
-- Public customer tracking permits individual document lookup but not listing.
-  Public pickup requests accept only the expected fields with length and mobile
-  validation.
+- Public customer tracking requires the bill number together with the order's
+  mobile number. Mobile-only history and saved-address lookup are disabled.
+  Public pickup requests accept only the expected fields with store, date,
+  time-slot, length and mobile validation.
+- Online pickup and UPI are intentionally off until the owner enters the real
+  store mobile number, working pickup slots and UPI ID. Store managers start
+  with a zero discount limit until the owner chooses a different limit.
 - Use **Masters → Download full backup** regularly. Full backups contain
   transactions and payroll and must be stored privately.
 - The Firebase Spark plan remains usable without a paid dependency. Email/
