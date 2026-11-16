@@ -346,7 +346,7 @@ const I = {
 const ic = n => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + (I[n] || "") + '</svg>';
 
 /* ---------- state & data ---------- */
-const APP_VER = 69;
+const APP_VER = 70;
 const COLS = ["stores","employees","customers","services","groups","products","routes","pricelists","colors","vendors","orders","closings","workers","pieceRates","wpays","workTypes","pickups","complaints","trips","rcash","attendance","advances","webreq"];
 const S = { db: null, mode: "connecting", d: Object.fromEntries(COLS.map(c => [c, []])), biz: undefined, counters: {},
   stack: [], view: "home", params: {}, form: null, draft: null, storeId: lsGet("ll_store"), empId: lsGet("ll_emp") || null, isOwner: false, userReady: false, skipSetup: false, ui: {}, armed: null,
@@ -587,17 +587,13 @@ function authGateHtml(){ const u = S.authUser;
     '<div class="hello"><div class="logo">' + ic("shirt") + '</div><div><h2 style="margin:0;color:var(--navy)">Lakshmi\'s Laundry</h2><p class="hint" style="margin:4px 0 0">Owner and staff sign-in</p></div></div>' +
     (u && S.accessDenied ? '<div class="notice">' + ic("warn") + '<div><b>' + esc(S.fireErr || ("Access is not approved for " + (u.email || "this account") + ".")) + '</b><br>The owner must add this email in Masters → Staff and switch on staff app access.</div></div><button class="btn ghost" data-act="logout">Use another account</button>' : '<p class="hint">Use the exact email approved by the owner. Only <b>' + OWNER_EMAIL + '</b> has Owner access.</p>' + (S.fireErr ? '<div class="notice">' + ic("warn") + '<div>' + esc(S.fireErr) + '</div></div>' : "") +
       '<form id="emailLogin" class="stack" style="gap:10px"><label class="f"><span>Email address</span><input class="in" id="loginEmail" type="email" autocomplete="username" required></label><label class="f"><span>Password</span><input class="in" id="loginPassword" type="password" autocomplete="current-password" minlength="10" required></label><button class="btn" type="submit">Sign in with email</button><button class="link" type="button" data-act="passwordReset">Forgot or set password?</button></form>' +
-      '<div class="hint" style="display:flex;align-items:center;gap:10px"><span style="height:1px;background:var(--line);flex:1"></span>or<span style="height:1px;background:var(--line);flex:1"></span></div><div id="googleButton" style="display:flex;justify-content:center;min-height:44px"></div>') +
+      '<div class="hint" style="display:flex;align-items:center;gap:10px"><span style="height:1px;background:var(--line);flex:1"></span>or<span style="height:1px;background:var(--line);flex:1"></span></div><button class="btn ghost" type="button" data-act="googleLogin">Continue with Google</button>') +
     '<p class="hint" style="text-align:center;margin:0">Never share passwords. The owner controls staff roles and store access.</p></div></div></div>'; }
-
-function initGoogleButton(){ if (!document.getElementById("googleButton")) return; if (!(window.google && google.accounts && google.accounts.id)) { setTimeout(initGoogleButton, 250); return; }
-  google.accounts.id.initialize({client_id:"102346216721-72v4ajd9v05glvl4l38p7h9rmft1kn48.apps.googleusercontent.com", auto_select:false, cancel_on_tap_outside:false, callback:async r => { try { S.fireErr = ""; const c = firebase.auth.GoogleAuthProvider.credential(r.credential); await firebase.auth().signInWithCredential(c); } catch(e) { console.error(e); S.fireErr = (e && (e.code || e.message)) || "Google sign-in failed"; render(); } }});
-  google.accounts.id.renderButton(document.getElementById("googleButton"), {type:"standard", theme:"outline", size:"large", text:"continue_with", shape:"rectangular", width:320}); }
 
 function initEmailLogin(){ const f = document.getElementById("emailLogin"); if (!f) return; f.onsubmit = async e => { e.preventDefault(); const email = document.getElementById("loginEmail").value.trim().toLowerCase(), password = document.getElementById("loginPassword").value; const b = f.querySelector('button[type="submit"]'); b.disabled = true; b.textContent = "Signing in…"; S.fireErr = ""; try { await firebase.auth().signInWithEmailAndPassword(email, password); } catch(err) { S.fireErr = authMessage(err); render(); } }; }
 
 function render(){
-  if (S.fire && (!S.authUser || S.accessDenied)) { app.innerHTML = authGateHtml(); if (!S.accessDenied) { setTimeout(initGoogleButton, 0); setTimeout(initEmailLogin, 0); } return; }
+  if (S.fire && (!S.authUser || S.accessDenied)) { app.innerHTML = authGateHtml(); if (!S.accessDenied) setTimeout(initEmailLogin, 0); return; }
   if (!ready()) { app.innerHTML = '<div class="loading"><div><div class="spin"></div>Opening your store…</div></div>'; return; }
   let v = S.view;
   if (!S.biz && !S.skipSetup && v === "home") v = "setup";
@@ -3370,6 +3366,7 @@ async function addStarter(){
 
 const ACT = {
   back, home,
+  googleLogin: async el => { el.disabled = true; S.fireErr = ""; try { const p = new firebase.auth.GoogleAuthProvider(); p.setCustomParameters({prompt:"select_account"}); await firebase.auth().signInWithPopup(p); } catch(e) { console.error(e); S.fireErr = authMessage(e); render(); } },
   logout: async () => { await firebase.auth().signOut(); location.reload(); },
   passwordReset: async () => { const input = document.getElementById("loginEmail"); const email = String((input && input.value) || "").trim().toLowerCase(); if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { if (input) input.focus(); return toast("Enter your email address first."); } try { await firebase.auth().sendPasswordResetEmail(email); toast("Password setup email sent. Check inbox and spam."); } catch(e) { console.error(e); toast(authMessage(e)); } },
   staffPasswordEmail: async el => { if (!S.isOwner) return; const email = String(el.dataset.email || "").trim().toLowerCase(); if (!email) return; el.disabled = true; try { await firebase.auth().sendPasswordResetEmail(email); toast("Password setup email sent to " + email); } catch(e) { console.error(e); toast(authMessage(e)); } finally { el.disabled = false; } },
@@ -4067,5 +4064,4 @@ async function boot(){
 }
 boot();
 </script>
-<script src="https://accounts.google.com/gsi/client" async defer></script>
 <script>if("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(function(){});</script></body></html>
