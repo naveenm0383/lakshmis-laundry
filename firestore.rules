@@ -35,6 +35,18 @@ service cloud.firestore {
         && request.resource.data.total == resource.data.total
         && request.resource.data.priceList == resource.data.priceList;
     }
+    function canReadOrder() {
+      return activeStaff() && (allowedStore(resource.data.storeId) ||
+        ('xfer' in resource.data && allowedStore(resource.data.xfer.to)));
+    }
+    function transferOrderUpdate() {
+      return (manager() || counter() || processor()) && 'xfer' in resource.data && allowedStore(resource.data.xfer.to)
+        && request.resource.data.storeId == resource.data.storeId
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['wf','flow','status','jobs','history','xfer']);
+    }
+    function canReadBatch() {
+      return activeStaff() && resource.data.storeIds is list && resource.data.storeIds.hasAny(access().stores);
+    }
 
     match /staffAccess/{staffEmail} {
       allow read: if admin() || (signedIn() && staffEmail == email());
@@ -131,11 +143,29 @@ service cloud.firestore {
     }
 
     match /orders/{id} {
-      allow read: if canReadStoreDoc();
+      allow read: if canReadOrder();
       allow create: if canCreateStoreDoc() && (manager() || counter() || processor() || rider());
-      allow update: if canUpdateStoreDoc() &&
-        ((processor() && processingOrderFields()) || (rider() && riderOrderFields()) || manager() || counter());
+      allow update: if (canUpdateStoreDoc() &&
+        ((processor() && processingOrderFields()) || (rider() && riderOrderFields()) || manager() || counter()))
+        || transferOrderUpdate();
       allow delete: if admin() && canReadStoreDoc();
+    }
+
+    match /batches/{id} {
+      allow read: if admin() || canReadBatch();
+      allow create: if (admin() || role("Store manager") || role("Store staff"))
+        && request.resource.data.from is string && allowedStore(request.resource.data.from)
+        && request.resource.data.to is string && request.resource.data.from != request.resource.data.to
+        && request.resource.data.storeIds is list && request.resource.data.storeIds.hasAll([request.resource.data.from, request.resource.data.to]);
+      allow update: if (admin() || canReadBatch()) && (manager() || counter() ||
+        (processor() && allowedStore(resource.data.to)
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['work','events','status'])
+          && request.resource.data.status in ['In process','Count mismatch']))
+        && request.resource.data.from == resource.data.from
+        && request.resource.data.to == resource.data.to
+        && request.resource.data.svc == resource.data.svc
+        && request.resource.data.no == resource.data.no;
+      allow delete: if admin() && !('receivedAt' in resource.data);
     }
 
     match /{collection}/{id} {
