@@ -346,7 +346,7 @@ const I = {
 const ic = n => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + (I[n] || "") + '</svg>';
 
 /* ---------- state & data ---------- */
-const APP_VER = 78;
+const APP_VER = 79;
 const COLS = ["stores","employees","customers","services","groups","products","routes","pricelists","colors","vendors","orders","closings","workers","pieceRates","wpays","workTypes","pickups","complaints","trips","rcash","attendance","advances","webreq"];
 const S = { db: null, mode: "connecting", d: Object.fromEntries(COLS.map(c => [c, []])), biz: undefined, counters: {},
   stack: [], view: "home", params: {}, form: null, draft: null, storeId: lsGet("ll_store"), empId: lsGet("ll_emp") || null, isOwner: false, userReady: false, skipSetup: false, ui: {}, armed: null,
@@ -761,7 +761,7 @@ function occasionsHtml(t){
 VIEWS.masters = () => {
   const t = (v, icon, label, n, act) => '<button class="tile" data-act="' + (act || "go") + '"' + (v ? ' data-v="' + v + '"' : "") + '><span class="ic">' + ic(icon) + '</span><b>' + label + '</b>' + (n !== undefined ? '<small>' + n + ' saved</small>' : "") + '</button>';
   const hasStore = !!store();
-  return { title: "Masters", back: false, nav: "masters",
+  return { title: "Setup", back: false, nav: "masters",
     body: (!loginRequired() && !S.fire ? '<div class="notice info">' + ic("users") + '<div>Staff login is off. In Staff, switch on Uses the app and set a PIN to turn it on.</div></div>' : "") +
       '<p class="sec-title">Business and store</p><div class="tiles">' + (isAdmin() ? t("setup", "building", "Business details") : "") + (hasStore ? t("", "store", "Current store settings", undefined, "editStore") : "") + (isAdmin() ? t("", "plus", "Create new store", undefined, "newStore") : "") + t("stores", "store", "All stores", allowedStores().length) + t("list:routes", "route", "Routes", S.d.routes.length) + '</div>' +
       '<p class="sec-title">People</p><div class="tiles">' + t("list:customers", "user", "Customers", S.d.customers.length) + (isAdmin() ? t("list:workers", "users", "Staff & email access", S.d.workers.length) : "") + t("list:workTypes", "layers", "Work types", workTypes().length) + (hasStore && canPayroll() ? '<button class="tile" data-act="editStore" data-tab="attend"><span class="ic">' + ic("cal") + '</span><b>Working hours &amp; week-off rules</b><small>Store-wise</small></button>' : "") + '</div>' +
